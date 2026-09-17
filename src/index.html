@@ -128,6 +128,21 @@
           </div>
         </div>
       </div>
+
+      <button id="chat-toggle" type="button" class="chat-toggle">?</button>
+      <div id="chat-panel" class="chat-panel" hidden>
+        <div class="chat-header">
+          <span>Asistente</span>
+          <button id="chat-close" type="button" class="btn ghost tiny">X</button>
+        </div>
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-msg bot">Hola, soy el asistente de EnmovCRM. Preguntame lo que quieras sobre la app.</div>
+        </div>
+        <form id="chat-form" class="chat-form" onsubmit="return false">
+          <input id="chat-input" type="text" placeholder="Escribe tu pregunta..." autocomplete="off">
+          <button id="chat-send" type="submit" class="btn primary tiny">Enviar</button>
+        </form>
+      </div>
     </div>
 
     <script>
