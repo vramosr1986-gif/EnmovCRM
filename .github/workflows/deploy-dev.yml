@@ -1,0 +1,49 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  push_dev:
+    name: Push to Apps Script (dev)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install clasp
+        run: npm i -g @google/clasp
+
+      - name: Restore clasp credentials
+        run: |
+          echo "$CLASPRC_JSON_B64" | base64 --decode > ~/.clasprc.json
+        env:
+          CLASPRC_JSON_B64: ${{ secrets.CLASPRC_JSON_B64 }}
+
+      - name: Push code (dev)
+        run: clasp push --force
