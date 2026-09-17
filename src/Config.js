@@ -1,4 +1,4 @@
-const APP_TITLE = 'CRM - MAVIC - Gestion Unificada [DEV]';
+const APP_TITLE = 'CRM - MAVIC - Gestion Unificada';
 
 const MODULOS = {
   NAVTA: 'navta',
