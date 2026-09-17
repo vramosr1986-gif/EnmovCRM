@@ -52,3 +52,11 @@ jobs:
         run: clasp deploy --deploymentId $CLASP_DEPLOYMENT_ID
         env:
           CLASP_DEPLOYMENT_ID: ${{ secrets.CLASP_DEPLOYMENT_ID }}
+
+      - name: Show production URL
+        run: |
+          echo "### ✅ Producción desplegada" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://script.google.com/macros/s/$CLASP_DEPLOYMENT_ID/exec" >> $GITHUB_STEP_SUMMARY
+        env:
+          CLASP_DEPLOYMENT_ID: ${{ secrets.CLASP_DEPLOYMENT_ID }}

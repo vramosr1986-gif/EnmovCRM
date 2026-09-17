@@ -47,3 +47,9 @@ jobs:
 
       - name: Push code (dev)
         run: clasp push --force
+
+      - name: Show dev URL
+        run: |
+          echo "### ✅ Desarrollo actualizado" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL dev:** https://script.google.com/macros/s/AKfycbz_s3YwBRXE_Pq9rvKhmGD-q_tKl7oiuS3fKj2BidHe/exec" >> $GITHUB_STEP_SUMMARY
