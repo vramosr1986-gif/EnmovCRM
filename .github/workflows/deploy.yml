@@ -41,9 +41,9 @@ jobs:
 
       - name: Restore clasp credentials
         run: |
-          echo "$CLASPRC_JSON" | tr -d '\r' > ~/.clasprc.json
+          echo "$CLASPRC_JSON_B64" | base64 --decode > ~/.clasprc.json
         env:
-          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASPRC_JSON_B64: ${{ secrets.CLASPRC_JSON_B64 }}
 
       - name: Push code
         run: clasp push --force
