@@ -41,7 +41,7 @@ jobs:
 
       - name: Restore clasp credentials
         run: |
-          echo "$CLASPRC_JSON" > ~/.clasprc.json
+          echo "$CLASPRC_JSON" | tr -d '\r' > ~/.clasprc.json
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
