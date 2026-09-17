@@ -1,0 +1,2742 @@
+<script>
+(function () {
+  const appButtons = Array.prototype.slice.call(document.querySelectorAll('[data-app-id]'));
+  const moduleTitleEl = document.getElementById('current-module');
+  const refreshBtn = document.getElementById('btn-refresh');
+  const newRowBtn = document.getElementById('btn-new-row');
+  const exportExcelBtn = document.getElementById('btn-export-excel');
+  const tableEl = document.getElementById('tabla-modulo');
+  const errorBoxEl = document.getElementById('error-box');
+  const duplicatesBoxEl = document.getElementById('duplicates-box');
+  const summaryBoxEl = document.getElementById('summary-box');
+  const filterClientEl = document.getElementById('filter-client');
+  const filterMonthFromEl = document.getElementById('filter-month-from');
+  const filterMonthToEl = document.getElementById('filter-month-to');
+  const filterAmountMinEl = document.getElementById('filter-amount-min');
+  const filterAmountMaxEl = document.getElementById('filter-amount-max');
+  const filterPaymentEl = document.getElementById('filter-payment');
+  const filterSearchEl = document.getElementById('filter-search');
+  const clearFiltersBtn = document.getElementById('btn-clear-filters');
+  const supportsTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (supportsTouch) {
+    document.body.classList.add('touch');
+  }
+
+  const calPrevEl = document.getElementById('cal-prev');
+  const calNextEl = document.getElementById('cal-next');
+  const calTitleEl = document.getElementById('cal-title');
+  const calGridEl = document.getElementById('cal-grid');
+  const calModuleFilterEl = document.getElementById('cal-module-filter');
+
+  const modalOverlayEl = document.getElementById('modal-overlay');
+  const modalCardEl = document.querySelector('.modal-card');
+  const modalTitleEl = document.getElementById('modal-title');
+  const modalBodyEl = document.getElementById('modal-body');
+  const modalSaveEl = document.getElementById('modal-save');
+  const modalCloseEl = document.getElementById('modal-close');
+  const modalCancelEl = document.getElementById('modal-cancel');
+
+  const SESSION_STORAGE_KEY = 'enmovCRM_sesion';
+
+  let currentToken = null;
+  let currentUserNombre = null;
+  let currentModuleId = null;
+  let currentModuleName = null;
+  let currentAllowsInvoice = false;
+  let currentHeaders = [];
+  let currentRows = [];
+  let sourceHeaders = [];
+  let sourceRows = [];
+  let sourceRowIndexMap = [];
+  let visibleToSourceColumnIndexes = [];
+  let filteredRows = [];
+  let clientColIdx = -1;
+  let amountColIdx = -1;
+  let dateColIdx = -1;
+  let hourColIdx = -1;
+  let physioColIdx = -1;
+  let operationColIdx = -1;
+  let paymentColIdx = -1;
+  let modalMode = null;
+  let editingRowIndex = -1;
+  let filteredTotalAmount = null;
+  let problemRowsFilter = null;
+  let sortColumnIndex = -1;
+  let sortDirection = 'asc';
+  let duplicateGroupBySourceIndex = {};
+  let currentMergeFiles = [];
+  let currentConvertImages = [];
+  let currentUserRole = null;
+  let calYear = -1;
+  let calMonth = -1;
+  let calSesiones = [];
+  let calFiltro = '';
+  let calDiaAbierto = '';
+  let inlineEditState = null;
+  let touchTapState = null;
+
+  function showError(text) {
+    errorBoxEl.textContent = text;
+    errorBoxEl.hidden = false;
+  }
+
+  function clearError() {
+    errorBoxEl.hidden = true;
+    errorBoxEl.textContent = '';
+  }
+
+  function clearDuplicatesWarning() {
+    duplicatesBoxEl.hidden = true;
+    duplicatesBoxEl.textContent = '';
+    duplicateGroupBySourceIndex = {};
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function openModal(title) {
+    modalTitleEl.textContent = title;
+    modalOverlayEl.hidden = false;
+  }
+
+  function closeModal() {
+    modalOverlayEl.hidden = true;
+    modalMode = null;
+    modalCardEl.classList.remove('cal-modal');
+    editingRowIndex = -1;
+    currentMergeFiles = [];
+    currentConvertImages = [];
+    modalSaveEl.hidden = false;
+    modalSaveEl.disabled = false;
+    modalBodyEl.innerHTML = '';
+    modalSaveEl.textContent = 'Guardar';
+  }
+
+  function normalize(text) {
+    return String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  function isNumericText(value) {
+    if (value == null || String(value).trim() === '') {
+      return false;
+    }
+    var s = String(value).trim().replace(/\s/g, '').replace(/[€$]/g, '').replace(/,/g, '.');
+    return /^[-+]?\d+(\.\d+)?$/.test(s);
+  }
+
+  function parseNumber(value) {
+    if (value == null || value === '') {
+      return null;
+    }
+    var txt = String(value).trim().replace(/\s/g, '').replace(/[€$]/g, '');
+    if (txt.includes(',') && txt.includes('.')) {
+      txt = txt.replace(/\./g, '').replace(',', '.');
+    } else if (txt.includes(',')) {
+      txt = txt.replace(',', '.');
+    }
+    var n = Number(txt.replace(/[^0-9.-]/g, ''));
+    return isNaN(n) ? null : n;
+  }
+
+  function parseDate(value) {
+    if (!value) {
+      return null;
+    }
+    var s = String(value).trim();
+    var es = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (es) {
+      return new Date(Number(es[3]), Number(es[2]) - 1, Number(es[1]));
+    }
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    }
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function nowDate() {
+    var d = new Date();
+    return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear();
+  }
+
+  function nowTime() {
+    var d = new Date();
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function nowTimestamp() {
+    return nowDate() + ' ' + nowTime();
+  }
+
+  function getHeaderKey(header) {
+    return normalize(header).replace(/\s+/g, '_');
+  }
+
+  function getHeaderIndexByPattern(pattern) {
+    for (var i = 0; i < currentHeaders.length; i++) {
+      if (pattern.test(getHeaderKey(currentHeaders[i]))) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function getFieldOptions(header, values) {
+    var key = getHeaderKey(header);
+
+    if (/^fisio_de_sesion$|^fisio_de_sesion\*$/.test(key)) {
+      return ['Carolina', 'Magui', 'Paula'];
+    }
+
+    if (/^quien_cobra$|^quien_cobra\*$/.test(key)) {
+      return ['Carolina', 'Magui', 'Paula'];
+    }
+
+    if (/^que_paga$|^que_paga\*$/.test(key)) {
+      return ['Sesion', 'Bono', 'Pilates'];
+    }
+
+    if (/^como_paga$|^como_paga\*$/.test(key)) {
+      return ['Efectivo', 'Tarjeta', 'Bono'];
+    }
+
+    if (/^sesion_o_solopago$|^sesion_o_solopago\*$/.test(key)) {
+      return ['Pilates', 'Fisio', 'Pago'];
+    }
+
+    return null;
+  }
+
+  function isCantidadField(header) {
+    var key = getHeaderKey(header);
+    return /^cantidad$|^cantidad\*$/.test(key);
+  }
+
+  function isDateField(header) {
+    return /^(fecha de la sesion|fecha sesion|fecha de sesion|fecha)$/.test(normalize(header));
+  }
+
+  function isTimeField(header) {
+    return /^(hora de la sesion|hora sesion|hora de sesion|hora)$/.test(normalize(header));
+  }
+
+  function toDateInputValue(value) {
+    var s = String(value == null ? '' : value).trim();
+    var es = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (es) {
+      return es[3] + '-' + pad2(es[2]) + '-' + pad2(es[1]);
+    }
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      return iso[1] + '-' + iso[2] + '-' + iso[3];
+    }
+    return s;
+  }
+
+  function fromDateInputValue(value) {
+    var s = String(value == null ? '' : value).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      return String(Number(iso[3])) + '/' + pad2(Number(iso[2])) + '/' + iso[1];
+    }
+    return s;
+  }
+
+  function toTimeInputValue(value) {
+    var s = String(value == null ? '' : value).trim();
+    var m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (m) {
+      return pad2(Number(m[1])) + ':' + pad2(Number(m[2]));
+    }
+    return s;
+  }
+
+  function fromTimeInputValue(value) {
+    var s = String(value == null ? '' : value).trim();
+    var m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      return pad2(Number(m[1])) + ':' + pad2(Number(m[2])) + ':00';
+    }
+    return s;
+  }
+
+  function renderFieldControl(header, colIndex, value, values) {
+    var options = getFieldOptions(header, values);
+    var safeValue = value == null ? '' : String(value);
+
+    if (!options || !options.length) {
+      if (isDateField(header)) {
+        return '<input type="date" data-edit-col="' + colIndex + '" data-original="' + escapeHtml(safeValue) + '" value="' + escapeHtml(toDateInputValue(safeValue)) + '">';
+      }
+      if (isTimeField(header)) {
+        return '<input type="time" data-edit-col="' + colIndex + '" data-original="' + escapeHtml(safeValue) + '" value="' + escapeHtml(toTimeInputValue(safeValue)) + '">';
+      }
+      if (isCantidadField(header)) {
+        return '<input type="text" inputmode="decimal" data-edit-col="' + colIndex + '" data-numeric-field="1" value="' + escapeHtml(safeValue) + '">';
+      }
+      return '<input type="text" data-edit-col="' + colIndex + '" value="' + escapeHtml(safeValue) + '">';
+    }
+
+    var allOptions = options.slice();
+    if (safeValue && allOptions.indexOf(safeValue) === -1) {
+      allOptions.push(safeValue);
+    }
+
+    var html = '<select data-edit-col="' + colIndex + '">';
+    allOptions.forEach(function(opt) {
+      var selected = opt === safeValue ? ' selected' : '';
+      html += '<option value="' + escapeHtml(opt) + '"' + selected + '>' + escapeHtml(opt) + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function isHiddenFormField(header) {
+    var key = getHeaderKey(header);
+    return /^quien_cobra$/.test(key) || /^sesion_o_solopago$/.test(key);
+  }
+
+  function firstVisibleColIndex() {
+    for (var i = 0; i < currentHeaders.length; i++) {
+      if (!isHiddenFormField(currentHeaders[i])) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  function renderRecordForm(values) {
+    var html = '<div class="form-grid">';
+    currentHeaders.forEach(function(header, i) {
+      var currentValue = values && values[i] != null ? values[i] : '';
+      if (isHiddenFormField(header)) {
+        html += '<input type="hidden" data-edit-col="' + i + '" value="' + escapeHtml(safeValueOf(currentValue)) + '">';
+        return;
+      }
+      html += '<label>' + escapeHtml(header) + '</label>';
+      html += renderFieldControl(header, i, currentValue, values || []);
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function safeValueOf(value) {
+    return value == null ? '' : String(value);
+  }
+
+  function collectModalValues() {
+    var inputs = Array.prototype.slice.call(modalBodyEl.querySelectorAll('[data-edit-col]'));
+    var values = [];
+    inputs.forEach(function(input) {
+      var col = Number(input.getAttribute('data-edit-col'));
+      var header = (currentHeaders[col] || '');
+      var value = input.value;
+      var originalRaw = input.getAttribute('data-original');
+      if (isDateField(header)) {
+        value = (originalRaw != null && value === toDateInputValue(originalRaw)) ? originalRaw : fromDateInputValue(value);
+      } else if (isTimeField(header)) {
+        value = (originalRaw != null && value === toTimeInputValue(originalRaw)) ? originalRaw : fromTimeInputValue(value);
+      }
+      values[col] = value;
+    });
+    return values;
+  }
+
+  function validarCamposNumericosDelModal() {
+    var numericInputs = Array.prototype.slice.call(modalBodyEl.querySelectorAll('[data-numeric-field]'));
+    for (var i = 0; i < numericInputs.length; i++) {
+      var input = numericInputs[i];
+      var raw = input.value.trim();
+      if (!raw || parseNumber(raw) == null) {
+        showError('El campo "Cantidad" debe ser numerico.');
+        input.focus();
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function refreshSesionSoloPagoOptions() {
+    if (modalMode !== 'create' && modalMode !== 'edit') {
+      return;
+    }
+
+    var sesionColIdx = getHeaderIndexByPattern(/^sesion_o_solopago$/);
+    if (sesionColIdx < 0) {
+      return;
+    }
+
+    var selectEl = modalBodyEl.querySelector('[data-edit-col="' + sesionColIdx + '"]');
+    if (!selectEl || selectEl.tagName !== 'SELECT') {
+      return;
+    }
+
+    var values = collectModalValues();
+    var currentValue = values[sesionColIdx] == null ? '' : String(values[sesionColIdx]);
+    var options = getFieldOptions(currentHeaders[sesionColIdx], values) || [];
+    if (!options.length) {
+      return;
+    }
+    if (currentValue && options.indexOf(currentValue) === -1) {
+      options.push(currentValue);
+    }
+
+    selectEl.innerHTML = options.map(function(opt) {
+      var selected = opt === currentValue ? ' selected' : '';
+      return '<option value="' + escapeHtml(opt) + '"' + selected + '>' + escapeHtml(opt) + '</option>';
+    }).join('');
+  }
+
+  function getDefaultValueForHeader(header) {
+    var h = normalize(header);
+
+    if (/^marca temporal$/.test(h)) {
+      return nowTimestamp();
+    }
+    if (/^fecha de la sesion$|^fecha sesion$|^fecha$/.test(h)) {
+      return nowDate();
+    }
+    if (/^hora de la sesion$|^hora sesion$|^hora$/.test(h)) {
+      return nowTime();
+    }
+    if (/^fisio_de_sesion$|^fisio de sesion$/.test(h)) {
+      return currentUserNombre || 'Magui';
+    }
+    if (/^quien_cobra$|^quien cobra$/.test(h)) {
+      return currentUserNombre || 'Magui';
+    }
+    if (/^que_paga$|^que paga$/.test(h)) {
+      return 'Sesion';
+    }
+    if (/^numero operacion$|^numero de operacion$|^n.? operacion$/.test(h)) {
+      return '0';
+    }
+
+    return '';
+  }
+
+  function detectFilterColumns() {
+    clientColIdx = -1;
+    amountColIdx = -1;
+    dateColIdx = -1;
+    hourColIdx = -1;
+    physioColIdx = -1;
+    operationColIdx = -1;
+    paymentColIdx = -1;
+
+    var sessionDateCandidate = -1;
+    var timestampDateCandidate = -1;
+
+    currentHeaders.forEach(function(header, idx) {
+      var h = normalize(header);
+      if (clientColIdx === -1 && /(cliente|nombre|paciente|usuario)/.test(h)) {
+        clientColIdx = idx;
+      }
+      if (amountColIdx === -1 && /(cantidad|importe|total|base)/.test(h)) {
+        amountColIdx = idx;
+      }
+      if (sessionDateCandidate === -1 && /(fecha de la sesion|fecha sesion|fecha de sesion)/.test(h)) {
+        sessionDateCandidate = idx;
+      }
+      if (timestampDateCandidate === -1 && /(marca temporal|timestamp|fecha)/.test(h)) {
+        timestampDateCandidate = idx;
+      }
+      if (hourColIdx === -1 && /(hora de la sesion|hora sesion|hora de sesion|hora)/.test(h)) {
+        hourColIdx = idx;
+      }
+      if (physioColIdx === -1 && /(fisio_de_sesion|fisio de sesion|fisio|profesional|terapeuta)/.test(h)) {
+        physioColIdx = idx;
+      }
+      if (operationColIdx === -1 && /(numero operacion|numero de operacion|n.? operacion|operacion)/.test(h)) {
+        operationColIdx = idx;
+      }
+      if (paymentColIdx === -1 && /(como_paga|como paga|como han pagado|forma de pago)/.test(h)) {
+        paymentColIdx = idx;
+      }
+    });
+
+    dateColIdx = sessionDateCandidate >= 0 ? sessionDateCandidate : timestampDateCandidate;
+  }
+
+  function normalizeDateForKey(value) {
+    var d = parseDate(value);
+    if (!d) {
+      return normalize(value);
+    }
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function normalizeHourForKey(value) {
+    var s = String(value || '').trim();
+    var m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!m) {
+      return normalize(s);
+    }
+    return pad2(Number(m[1])) + ':' + pad2(Number(m[2])) + ':' + pad2(Number(m[3] || 0));
+  }
+
+  function shouldIgnoreInDuplicatePairKey(colIndex) {
+    if (colIndex === dateColIdx || colIndex === hourColIdx || colIndex === physioColIdx || colIndex === operationColIdx) {
+      return true;
+    }
+    var header = currentHeaders[colIndex] || '';
+    var normalizedHeader = normalize(header);
+    return /(marca temporal|timestamp|comentario|comentarios|observaciones|notas|quien cobra|quien_cobra)/.test(normalizedHeader);
+  }
+
+  function buildDuplicatePairKey(row) {
+    var parts = [];
+    for (var i = 0; i < currentHeaders.length; i++) {
+      if (shouldIgnoreInDuplicatePairKey(i)) {
+        continue;
+      }
+      parts.push(normalize(row[i]));
+    }
+    return parts.join('||');
+  }
+
+  function findDuplicateRow(values, excludeSourceIndex) {
+    if (dateColIdx < 0 || hourColIdx < 0) {
+      return null;
+    }
+
+    var newRow = [];
+    for (var i = 0; i < currentHeaders.length; i++) {
+      newRow[i] = values[i] == null ? '' : values[i];
+    }
+
+    if (amountColIdx >= 0) {
+      var amountRaw = String(newRow[amountColIdx] || '').trim();
+      var amount = parseNumber(newRow[amountColIdx]);
+      if (!amountRaw || amount == null || amount === 0) {
+        return null;
+      }
+    }
+
+    var dateKey = normalizeDateForKey(newRow[dateColIdx]);
+    var hourKey = normalizeHourForKey(newRow[hourColIdx]);
+    var physioKey = physioColIdx >= 0 ? normalize(newRow[physioColIdx]) : '';
+    var operationKey = operationColIdx >= 0 ? normalize(newRow[operationColIdx]) : '';
+    if (!dateKey || !hourKey) {
+      return null;
+    }
+    var baseKey = dateKey + ' ' + hourKey + ' ' + physioKey + ' ' + operationKey;
+    var pairKey = buildDuplicatePairKey(newRow);
+
+    var match = null;
+    currentRows.forEach(function(wrapper) {
+      if (excludeSourceIndex != null && wrapper.sourceIndex === excludeSourceIndex) {
+        return;
+      }
+      var row = wrapper.data;
+      var rDateKey = normalizeDateForKey(row[dateColIdx]);
+      var rHourKey = normalizeHourForKey(row[hourColIdx]);
+      var rPhysioKey = physioColIdx >= 0 ? normalize(row[physioColIdx]) : '';
+      var rOperationKey = operationColIdx >= 0 ? normalize(row[operationColIdx]) : '';
+      if (!rDateKey || !rHourKey) {
+        return;
+      }
+      var rBaseKey = rDateKey + ' ' + rHourKey + ' ' + rPhysioKey + ' ' + rOperationKey;
+      if (rBaseKey !== baseKey) {
+        return;
+      }
+      if (buildDuplicatePairKey(row) !== pairKey) {
+        return;
+      }
+      match = wrapper;
+    });
+    return match;
+  }
+
+  function computeDuplicatePairs() {
+    if (dateColIdx < 0 || hourColIdx < 0) {
+      return [];
+    }
+
+    var map = {};
+
+    filteredRows.forEach(function(wrapper) {
+      var row = wrapper.data;
+      if (amountColIdx >= 0) {
+        var amountRaw = String(row[amountColIdx] || '').trim();
+        var amount = parseNumber(row[amountColIdx]);
+        if (!amountRaw || amount == null || amount === 0) {
+          return;
+        }
+      }
+
+      var dateKey = normalizeDateForKey(row[dateColIdx]);
+      var hourKey = normalizeHourForKey(row[hourColIdx]);
+      var physioKey = physioColIdx >= 0 ? normalize(row[physioColIdx]) : '';
+      var operationKey = operationColIdx >= 0 ? normalize(row[operationColIdx]) : '';
+      if (!dateKey || !hourKey) {
+        return;
+      }
+      var key = dateKey + ' ' + hourKey + ' ' + physioKey + ' ' + operationKey;
+      if (!map[key]) {
+        map[key] = [];
+      }
+      map[key].push(wrapper);
+    });
+
+    var duplicatePairs = [];
+    var duplicateGroupIndex = 0;
+
+    Object.keys(map).forEach(function(baseKey) {
+      var candidates = map[baseKey];
+      if (candidates.length < 2) {
+        return;
+      }
+
+      var pairBuckets = {};
+      candidates.forEach(function(wrapper) {
+        var pairKey = buildDuplicatePairKey(wrapper.data);
+        if (!pairBuckets[pairKey]) {
+          pairBuckets[pairKey] = [];
+        }
+        pairBuckets[pairKey].push(wrapper);
+      });
+
+      Object.keys(pairBuckets).forEach(function(pairKey) {
+        var rows = pairBuckets[pairKey].slice().sort(function(a, b) {
+          return a.sourceIndex - b.sourceIndex;
+        });
+
+        if (rows.length < 2) {
+          return;
+        }
+
+        for (var i = 0; i + 1 < rows.length; i += 2) {
+          var gid = duplicateGroupIndex;
+          duplicateGroupIndex += 1;
+
+          duplicateGroupBySourceIndex[rows[i].sourceIndex] = gid;
+          duplicateGroupBySourceIndex[rows[i + 1].sourceIndex] = gid;
+
+          var fila1 = rows[i].data;
+          var fila2 = rows[i + 1].data;
+          duplicatePairs.push({
+            group: gid,
+            baseKey: baseKey,
+            rows: [rows[i].sourceIndex + 2, rows[i + 1].sourceIndex + 2],
+            localIndexes: [rows[i].sourceIndex, rows[i + 1].sourceIndex],
+            cliente: clientColIdx >= 0 ? String(fila1[clientColIdx] || '') : '',
+            fila1: fila1,
+            fila2: fila2
+          });
+        }
+      });
+    });
+
+    return duplicatePairs;
+  }
+
+  function updateDuplicatesWarning() {
+    clearDuplicatesWarning();
+
+    var duplicatePairs = computeDuplicatePairs();
+
+    if (!duplicatePairs.length) {
+      return;
+    }
+
+    var details = duplicatePairs.slice(0, 4).map(function(pair) {
+      var s = rowDataSummary(pair.fila1);
+      return 'D' + (pair.group + 1) + ': ' + s.fecha + ' ' + s.hora + ' ' + s.cliente + ' ' + s.cantidad + '€ (filas ' + pair.rows.join(', ') + ')';
+    });
+    var suffix = duplicatePairs.length > 4 ? ' ...' : '';
+
+    duplicatesBoxEl.textContent =
+      'Aviso de duplicados: ' + duplicatePairs.length +
+      ' parejas repetidas. ' +
+      details.join(' | ') + suffix;
+    duplicatesBoxEl.hidden = false;
+  }
+
+  function computeEfectivoSinCantidad() {
+    if (paymentColIdx < 0 || amountColIdx < 0) {
+      return [];
+    }
+
+    var found = [];
+    currentRows.forEach(function(wrapper) {
+      var row = wrapper.data;
+      var paymentVal = normalize(row[paymentColIdx]);
+      if (paymentVal !== 'efectivo') {
+        return;
+      }
+      var amountRaw = String(row[amountColIdx] || '').trim();
+      var amount = parseNumber(row[amountColIdx]);
+      if (amountRaw && amount != null && amount !== 0) {
+        return;
+      }
+      found.push({
+        sourceIndex: wrapper.sourceIndex,
+        cliente: clientColIdx >= 0 ? String(row[clientColIdx] || '') : '',
+        cantidad: amountRaw
+      });
+    });
+    return found;
+  }
+
+  function rowDataSummary(row) {
+    return {
+      cliente: clientColIdx >= 0 ? String(row[clientColIdx] || '-') : '-',
+      fecha: dateColIdx >= 0 ? String(row[dateColIdx] || '-') : '-',
+      hora: hourColIdx >= 0 ? String(row[hourColIdx] || '-') : '-',
+      fisio: physioColIdx >= 0 ? String(row[physioColIdx] || '-') : '-',
+      cantidad: amountColIdx >= 0 ? String(row[amountColIdx] || '-') : '-',
+      operacion: operationColIdx >= 0 ? String(row[operationColIdx] || '-') : '-'
+    };
+  }
+
+  var duplicatePopupLastShownKey = 'enmov_duplicate_popup_last_shown';
+  var forceDuplicatePopupOnNextLoad = false;
+
+  function showDuplicateLoginPopup() {
+    var force = forceDuplicatePopupOnNextLoad;
+    forceDuplicatePopupOnNextLoad = false;
+
+    if (!force) {
+      var stored = Number(localStorage.getItem(duplicatePopupLastShownKey) || 0);
+      var now = Date.now();
+      if (stored && (now - stored) < 2 * 60 * 60 * 1000) {
+        return;
+      }
+      localStorage.setItem(duplicatePopupLastShownKey, String(Date.now()));
+    }
+
+    var duplicatePairs = computeDuplicatePairs();
+    var efectivos = computeEfectivoSinCantidad();
+
+    if (!duplicatePairs.length && !efectivos.length) {
+      return;
+    }
+
+    var html = '';
+
+    if (duplicatePairs.length) {
+      html += '<p style="margin-top:0"><strong>' + duplicatePairs.length + '</strong> registros duplicados encontrados.</p>';
+      html += '<div style="max-height:220px; overflow-y:auto; margin:8px 0">';
+      duplicatePairs.slice(0, 15).forEach(function(pair) {
+        var a = rowDataSummary(pair.fila1);
+        var b = rowDataSummary(pair.fila2);
+        html += '<div style="border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:0.85rem; background:#fef9f0">';
+        html += '<strong style="color:#b45309">D' + (pair.group + 1) + '</strong> · ' + escapeHtml(a.fecha) + ' ' + escapeHtml(a.hora) + ' · ' + escapeHtml(a.cliente) + ' · ' + escapeHtml(a.cantidad) + '€';
+        html += '<table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.8rem">';
+        html += '<thead><tr style="color:#6b7280"><th style="text-align:left; padding:2px 6px">Fila</th><th style="text-align:left; padding:2px 6px">Cliente</th><th style="text-align:left; padding:2px 6px">Fisio</th><th style="text-align:left; padding:2px 6px">Cantidad</th><th style="text-align:left; padding:2px 6px">Nº Op</th></tr></thead>';
+        html += '<tbody>';
+        html += '<tr><td style="padding:2px 6px">' + (pair.rows[0]) + '</td><td style="padding:2px 6px">' + escapeHtml(a.cliente) + '</td><td style="padding:2px 6px">' + escapeHtml(a.fisio) + '</td><td style="padding:2px 6px">' + escapeHtml(a.cantidad) + '</td><td style="padding:2px 6px">' + escapeHtml(a.operacion) + '</td></tr>';
+        html += '<tr><td style="padding:2px 6px">' + (pair.rows[1]) + '</td><td style="padding:2px 6px">' + escapeHtml(b.cliente) + '</td><td style="padding:2px 6px">' + escapeHtml(b.fisio) + '</td><td style="padding:2px 6px">' + escapeHtml(b.cantidad) + '</td><td style="padding:2px 6px">' + escapeHtml(b.operacion) + '</td></tr>';
+        html += '</tbody></table></div>';
+      });
+      if (duplicatePairs.length > 15) {
+        html += '<p style="color:#6b7280; font-size:0.82rem">... y ' + (duplicatePairs.length - 15) + ' mas</p>';
+      }
+      html += '<p style="color:#6b7280; font-size:0.82rem">Revisa la tabla y elimina los que sobren.</p>';
+    }
+
+    if (efectivos.length) {
+      html += '<div style="border-top:1px solid #e5e7eb; margin:12px 0; padding-top:12px">';
+      html += '<p style="margin-top:0; color:#dc2626"><strong>' + efectivos.length + '</strong> registros con <strong>Efectivo</strong> y cantidad <strong>0 o vacía</strong>. Esto no deberia existir.</p>';
+      html += '<div style="max-height:160px; overflow-y:auto">';
+      html += '<table style="width:100%; border-collapse:collapse; font-size:0.82rem">';
+      html += '<thead><tr style="color:#6b7280"><th style="text-align:left; padding:3px 6px">Fila</th><th style="text-align:left; padding:3px 6px">Cliente</th><th style="text-align:left; padding:3px 6px">Fecha</th><th style="text-align:left; padding:3px 6px">Hora</th></tr></thead><tbody>';
+      efectivos.slice(0, 15).forEach(function(item) {
+        var row = currentRows[item.sourceIndex] ? currentRows[item.sourceIndex].data : [];
+        var fecha = dateColIdx >= 0 ? String(row[dateColIdx] || '-') : '-';
+        var hora = hourColIdx >= 0 ? String(row[hourColIdx] || '-') : '-';
+        html += '<tr><td style="padding:3px 6px">' + (item.sourceIndex + 2) + '</td><td style="padding:3px 6px">' + escapeHtml(item.cliente) + '</td><td style="padding:3px 6px">' + escapeHtml(fecha) + '</td><td style="padding:3px 6px">' + escapeHtml(hora) + '</td></tr>';
+      });
+      if (efectivos.length > 15) {
+        html += '<tr><td colspan="4" style="color:#6b7280; padding:3px 6px">... y ' + (efectivos.length - 15) + ' mas</td></tr>';
+      }
+      html += '</tbody></table></div></div>';
+    }
+
+    openModal('Aviso de registros');
+    modalSaveEl.hidden = true;
+    modalBodyEl.innerHTML =
+      '<div style="border-bottom:1px solid #e5e7eb; margin-bottom:12px; padding-bottom:12px; text-align:center">' +
+      '<button type="button" id="btn-filtrar-problematicos" class="btn primary">Ver estos registros y solucionarlos</button>' +
+      '<p style="color:#6b7280; font-size:0.82rem; margin-bottom:0">Se filtrara la tabla mostrando solo estas filas para revisarlas, editarlas o eliminarlas.</p>' +
+      '</div>' + html;
+
+    var filtrarBtn = modalBodyEl.querySelector('#btn-filtrar-problematicos');
+    if (filtrarBtn) {
+      filtrarBtn.addEventListener('click', function() {
+        applyProblemRowsFilter();
+      });
+    }
+  }
+
+  function applyProblemRowsFilter() {
+    var indexes = [];
+    computeDuplicatePairs().forEach(function(pair) {
+      indexes.push(pair.localIndexes[0], pair.localIndexes[1]);
+    });
+    computeEfectivoSinCantidad().forEach(function(item) {
+      indexes.push(item.sourceIndex);
+    });
+    problemRowsFilter = indexes.filter(function(v, i, self) { return self.indexOf(v) === i; });
+
+    if (!problemRowsFilter.length) {
+      return;
+    }
+
+    closeModal();
+    refreshTableView();
+    tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function applyFilters() {
+    var clientFilter = normalize(filterClientEl.value);
+    var dateFromFilter = String(filterMonthFromEl.value || '').trim();
+    var dateToFilter = String(filterMonthToEl.value || '').trim();
+    var minValue = parseNumber(filterAmountMinEl.value);
+    var maxValue = parseNumber(filterAmountMaxEl.value);
+    var searchFilter = normalize(filterSearchEl.value);
+    var paymentFilter = normalize(filterPaymentEl.value);
+
+    var fromDate = null;
+    var toDate = null;
+
+    if (dateFromFilter) {
+      var fromParts = dateFromFilter.split('-');
+      fromDate = new Date(Number(fromParts[0]), Number(fromParts[1]) - 1, Number(fromParts[2]));
+    }
+
+    if (dateToFilter) {
+      var toParts = dateToFilter.split('-');
+      toDate = new Date(Number(toParts[0]), Number(toParts[1]) - 1, Number(toParts[2]));
+    }
+
+    if (fromDate && toDate && fromDate > toDate) {
+      filteredRows = [];
+      return;
+    }
+
+    filteredRows = currentRows.filter(function(wrapper) {
+      var row = wrapper.data;
+
+      if (problemRowsFilter) {
+        if (problemRowsFilter.indexOf(wrapper.sourceIndex) === -1) {
+          return false;
+        }
+      }
+
+      if (clientFilter && clientColIdx >= 0) {
+        var clientVal = normalize(row[clientColIdx]);
+        if (!clientVal.includes(clientFilter)) {
+          return false;
+        }
+      }
+
+      if ((fromDate || toDate) && dateColIdx >= 0) {
+        var dateVal = parseDate(row[dateColIdx]);
+        if (!dateVal) {
+          return false;
+        }
+        var rowDate = new Date(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDate());
+
+        if (fromDate && rowDate < fromDate) {
+          return false;
+        }
+
+        if (toDate && rowDate > toDate) {
+          return false;
+        }
+      }
+
+      if ((minValue != null || maxValue != null) && amountColIdx >= 0) {
+        var amount = parseNumber(row[amountColIdx]);
+        if (amount == null) {
+          return false;
+        }
+        if (minValue != null && amount < minValue) {
+          return false;
+        }
+        if (maxValue != null && amount > maxValue) {
+          return false;
+        }
+      }
+
+      if (paymentFilter && paymentColIdx >= 0) {
+        var paymentVal = normalize(row[paymentColIdx]);
+        if (!paymentVal.includes(paymentFilter)) {
+          return false;
+        }
+      }
+
+      if (searchFilter) {
+        var haystack = normalize(row.join(' '));
+        if (!haystack.includes(searchFilter)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  function removeUselessEnmovColumns(headers, rows) {
+    if (currentModuleId !== 'enmov') {
+      var identityMap = headers.map(function(_, idx) { return idx; });
+      return {
+        headers: headers,
+        rows: rows,
+        visibleToSourceColumnIndexes: identityMap
+      };
+    }
+
+    var indexesToRemove = [];
+    headers.forEach(function(h, idx) {
+      if (normalize(h) === 'columna 12') {
+        indexesToRemove.push(idx);
+      }
+    });
+
+    if (!indexesToRemove.length) {
+      var identityMapNoRemove = headers.map(function(_, idx) { return idx; });
+      return {
+        headers: headers,
+        rows: rows,
+        visibleToSourceColumnIndexes: identityMapNoRemove
+      };
+    }
+
+    var visibleToSource = [];
+    var nextHeaders = headers.filter(function(_, idx) {
+      var keep = indexesToRemove.indexOf(idx) === -1;
+      if (keep) {
+        visibleToSource.push(idx);
+      }
+      return keep;
+    });
+
+    var nextRows = rows.map(function(row) {
+      return row.filter(function(_, idx) {
+        return indexesToRemove.indexOf(idx) === -1;
+      });
+    });
+
+    return {
+      headers: nextHeaders,
+      rows: nextRows,
+      visibleToSourceColumnIndexes: visibleToSource
+    };
+  }
+
+  function buildSourceRowValuesFromVisible(sourceRowIndex, visibleValues) {
+    var totalCols = sourceHeaders.length;
+    var output = [];
+    var original = sourceRowIndex != null && sourceRows[sourceRowIndex] ? sourceRows[sourceRowIndex] : [];
+
+    for (var i = 0; i < totalCols; i++) {
+      output[i] = original[i] == null ? '' : original[i];
+    }
+
+    for (var v = 0; v < currentHeaders.length; v++) {
+      var sourceCol = visibleToSourceColumnIndexes[v];
+      if (sourceCol == null || sourceCol < 0 || sourceCol >= totalCols) {
+        sourceCol = v;
+      }
+      output[sourceCol] = visibleValues[v] == null ? '' : visibleValues[v];
+    }
+
+    return output;
+  }
+
+  function getFilteredAmountTotal() {
+    if (amountColIdx < 0) {
+      return null;
+    }
+
+    var total = 0;
+    var found = false;
+
+    filteredRows.forEach(function(wrapper) {
+      var n = parseNumber(wrapper.data[amountColIdx]);
+      if (n != null) {
+        total += n;
+        found = true;
+      }
+    });
+
+    return found ? total : null;
+  }
+
+  function updateSummary() {
+    filteredTotalAmount = getFilteredAmountTotal();
+    var text = 'Registros filtrados: ' + filteredRows.length;
+    if (filteredTotalAmount != null) {
+      text += ' · Total cantidad: ' + filteredTotalAmount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    summaryBoxEl.textContent = text;
+    summaryBoxEl.hidden = false;
+  }
+
+  function buildTable() {
+    if (!currentHeaders.length) {
+      tableEl.innerHTML = '<tbody><tr><td class="empty">Sin datos en este modulo.</td></tr></tbody>';
+      summaryBoxEl.hidden = true;
+      return;
+    }
+
+    var dupIndicator = '';
+    var dupHeaderClass = 'dup-col sortable';
+    if (sortColumnIndex === -2) {
+      dupHeaderClass += ' sorted-' + sortDirection;
+      dupIndicator = sortDirection === 'asc' ? ' ▲' : ' ▼';
+    }
+
+    var html = '<thead><tr><th class="' + dupHeaderClass + '" data-sort-dup="1">Dup' + dupIndicator + '</th>';
+    currentHeaders.forEach(function(h, i) {
+      if (isHiddenFormField(h)) {
+        return;
+      }
+      var cls = 'sortable';
+      var indicator = '';
+      if (sortColumnIndex === i) {
+        cls += ' sorted-' + sortDirection;
+        indicator = sortDirection === 'asc' ? ' ▲' : ' ▼';
+      }
+      html += '<th class="' + cls + '" data-sort-col="' + i + '">' + escapeHtml(h) + indicator + '</th>';
+    });
+    html += '<th>Acciones</th></tr></thead><tbody>';
+
+    filteredRows.forEach(function(wrapper) {
+      var row = wrapper.data;
+      var idx = wrapper.sourceIndex;
+      var dupGroup = duplicateGroupBySourceIndex[idx];
+      var rowClass = dupGroup == null ? '' : ' class="dup-row dup-g' + (dupGroup % 6) + '"';
+      html += '<tr' + rowClass + '>';
+      html += '<td class="dup-col" data-label="Dup">' + (dupGroup == null ? '' : ('D' + (dupGroup + 1))) + '</td>';
+      currentHeaders.forEach(function(h, i) {
+        if (isHiddenFormField(h)) {
+          return;
+        }
+        html += '<td class="editable-cell" data-edit-row="' + idx + '" data-edit-col="' + i + '" data-label="' + escapeHtml(h) + '">' + escapeHtml(row[i] || '') + '</td>';
+      });
+      html += '<td class="actions" data-label="Acciones">';
+      html += '<button type="button" class="btn tiny" data-action="edit" data-row="' + idx + '">Editar</button>';
+      html += '<button type="button" class="btn tiny danger" data-action="delete" data-row="' + idx + '">Eliminar</button>';
+      if (currentAllowsInvoice) {
+        html += '<button type="button" class="btn tiny accent" data-action="invoice" data-row="' + idx + '">Factura</button>';
+      }
+      html += '</td></tr>';
+    });
+
+    html += '</tbody>';
+
+    if (amountColIdx >= 0) {
+      html += '<tfoot><tr>';
+      for (var i = -1; i < currentHeaders.length; i++) {
+        if (i === -1) {
+          html += '<td class="dup-col"></td>';
+        } else if (isHiddenFormField(currentHeaders[i])) {
+          html += '';
+        } else if (i === firstVisibleColIndex()) {
+          html += '<td><strong>Total filtrado</strong></td>';
+        } else if (i === amountColIdx) {
+          var totalTxt = filteredTotalAmount == null ? '-' : filteredTotalAmount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          html += '<td><strong>' + escapeHtml(totalTxt) + '</strong></td>';
+        } else {
+          html += '<td></td>';
+        }
+      }
+      html += '<td></td></tr></tfoot>';
+    }
+
+    tableEl.innerHTML = html;
+  }
+
+  function refreshTableView() {
+    detectFilterColumns();
+    applyFilters();
+    updateDuplicatesWarning();
+    sortFilteredRows();
+    updateSummary();
+    buildTable();
+  }
+
+  function sortFilteredRows() {
+    if (sortColumnIndex < 0) {
+      if (sortColumnIndex !== -2) {
+        return;
+      }
+    }
+
+    var dir = sortDirection === 'asc' ? 1 : -1;
+
+    if (sortColumnIndex === -2) {
+      filteredRows.sort(function(a, b) {
+        var ga = duplicateGroupBySourceIndex[a.sourceIndex];
+        var gb = duplicateGroupBySourceIndex[b.sourceIndex];
+        var hasA = ga != null;
+        var hasB = gb != null;
+
+        if (hasA && !hasB) return -1 * dir;
+        if (!hasA && hasB) return 1 * dir;
+        if (!hasA && !hasB) {
+          return (a.sourceIndex - b.sourceIndex) * dir;
+        }
+
+        if (ga < gb) return -1 * dir;
+        if (ga > gb) return 1 * dir;
+        return (a.sourceIndex - b.sourceIndex) * dir;
+      });
+      return;
+    }
+
+    filteredRows.sort(function(a, b) {
+      var av = a.data[sortColumnIndex];
+      var bv = b.data[sortColumnIndex];
+
+      var an = isNumericText(av) ? parseNumber(av) : null;
+      var bn = isNumericText(bv) ? parseNumber(bv) : null;
+      if (an != null && bn != null) {
+        if (an < bn) return -1 * dir;
+        if (an > bn) return 1 * dir;
+        return 0;
+      }
+
+      var ad = parseDate(av);
+      var bd = parseDate(bv);
+      if (ad && bd) {
+        if (ad.getTime() < bd.getTime()) return -1 * dir;
+        if (ad.getTime() > bd.getTime()) return 1 * dir;
+        return 0;
+      }
+
+      var as = normalize(av);
+      var bs = normalize(bv);
+      if (as < bs) return -1 * dir;
+      if (as > bs) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function applyDashboardData(data) {
+    sourceHeaders = (data.headers || []).slice();
+    sourceRows = (data.rows || []).map(function(row) { return row.slice(); });
+    sourceRowIndexMap = (data.rowIndexMap && data.rowIndexMap.length === sourceRows.length)
+      ? data.rowIndexMap.slice()
+      : sourceRows.map(function(_, idx) { return idx; });
+    var cleaned = removeUselessEnmovColumns(data.headers || [], data.rows || []);
+    currentHeaders = cleaned.headers;
+    visibleToSourceColumnIndexes = cleaned.visibleToSourceColumnIndexes || currentHeaders.map(function(_, idx) { return idx; });
+    currentRows = cleaned.rows.map(function(row, sourceIndex) {
+      return {
+        sourceIndex: sourceIndex,
+        data: row
+      };
+    });
+  }
+
+  function loadModule(moduleId, moduleName, allowsInvoice, onSuccess) {
+    clearError();
+    currentModuleId = moduleId;
+    currentModuleName = moduleName;
+    currentAllowsInvoice = allowsInvoice;
+    moduleTitleEl.textContent = moduleName;
+    problemRowsFilter = null;
+
+    appButtons.forEach(function (btn) {
+      var isCurrent = btn.getAttribute('data-app-id') === moduleId;
+      btn.classList.toggle('is-active', isCurrent);
+    });
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        applyDashboardData(data);
+        refreshTableView();
+        showDuplicateLoginPopup();
+        if (onSuccess) {
+          onSuccess();
+        }
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo cargar el modulo.');
+      })
+      .getDashboardData(currentToken, moduleId);
+  }
+
+  function toRealRowIndex(localIndex) {
+    return (sourceRowIndexMap && sourceRowIndexMap[localIndex] != null) ? sourceRowIndexMap[localIndex] : localIndex;
+  }
+
+  function refreshCurrentModuleData(onSuccess, onFailure) {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        applyDashboardData(data);
+        refreshTableView();
+        onSuccess();
+      })
+      .withFailureHandler(function(err) {
+        if (onFailure) {
+          onFailure(err);
+        } else {
+          showError((err && err.message) ? err.message : 'No se pudo actualizar el modulo.');
+        }
+      })
+      .getDashboardData(currentToken, currentModuleId);
+  }
+
+  function openEditModal(rowIndex) {
+    var realIndex = toRealRowIndex(rowIndex);
+    clearError();
+
+    refreshCurrentModuleData(function() {
+      var localIndex = sourceRowIndexMap.indexOf(realIndex);
+      if (localIndex === -1) {
+        showError('Este registro ya no existe: puede que otra persona lo haya editado o eliminado. Se ha actualizado la tabla.');
+        return;
+      }
+
+      editingRowIndex = localIndex;
+      modalMode = 'edit';
+      openModal('Editar registro - ' + currentModuleName);
+
+      var selected = currentRows[localIndex] || { data: [] };
+      var row = selected.data || [];
+      modalBodyEl.innerHTML = renderRecordForm(row);
+      refreshSesionSoloPagoOptions();
+      modalSaveEl.textContent = 'Guardar';
+    });
+  }
+
+  function getRowWrapperBySourceIndex(sourceIndex) {
+    for (var i = 0; i < currentRows.length; i++) {
+      if (currentRows[i].sourceIndex === sourceIndex) {
+        return currentRows[i];
+      }
+    }
+    return null;
+  }
+
+  function clearInlineEditState() {
+    if (inlineEditState && inlineEditState.cell) {
+      inlineEditState.cell.classList.remove('cell-editing');
+    }
+    inlineEditState = null;
+  }
+
+  function saveInlineEdit(state, value) {
+    var wrapper = getRowWrapperBySourceIndex(state.rowIndex);
+    if (!wrapper) {
+      clearInlineEditState();
+      return;
+    }
+
+    if (isCantidadField(currentHeaders[state.colIndex] || '') && (!value.trim() || parseNumber(value) == null)) {
+      showError('El campo "Cantidad" debe ser numerico.');
+      state.cell.textContent = state.oldValue;
+      clearInlineEditState();
+      return;
+    }
+
+    if (state.oldValue === value) {
+      state.cell.textContent = value;
+      clearInlineEditState();
+      return;
+    }
+
+    state.saving = true;
+    state.input.disabled = true;
+
+    var values = wrapper.data.slice();
+    var cleanValue = value;
+    if (isDateField(currentHeaders[state.colIndex] || '')) {
+      cleanValue = (value === toDateInputValue(wrapper.data[state.colIndex])) ? wrapper.data[state.colIndex] : fromDateInputValue(value);
+    } else if (isTimeField(currentHeaders[state.colIndex] || '')) {
+      cleanValue = (value === toTimeInputValue(wrapper.data[state.colIndex])) ? wrapper.data[state.colIndex] : fromTimeInputValue(value);
+    }
+    values[state.colIndex] = cleanValue;
+    var payload = buildSourceRowValuesFromVisible(state.rowIndex, values);
+
+    google.script.run
+      .withSuccessHandler(function() {
+        clearInlineEditState();
+        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
+      })
+      .withFailureHandler(function(err) {
+        state.cell.textContent = state.oldValue;
+        clearInlineEditState();
+        showError((err && err.message) ? err.message : 'No se pudo guardar la celda.');
+      })
+      .actualizarRegistro(currentToken, currentModuleId, toRealRowIndex(state.rowIndex), payload);
+  }
+
+  function startInlineCellEdit(cell, rowIndex, colIndex) {
+    if (!currentModuleId) {
+      return;
+    }
+
+    clearError();
+
+    if (inlineEditState && inlineEditState.saving) {
+      return;
+    }
+
+    if (inlineEditState && inlineEditState.cell === cell) {
+      return;
+    }
+
+    if (inlineEditState) {
+      inlineEditState.cell.textContent = inlineEditState.oldValue;
+      clearInlineEditState();
+    }
+
+    var oldValue = cell.textContent || '';
+    var options = getFieldOptions(currentHeaders[colIndex] || '', []) || [];
+
+    var control;
+    if (options.length) {
+      control = document.createElement('select');
+      var allOptions = options.slice();
+      if (oldValue && allOptions.indexOf(oldValue) === -1) {
+        allOptions.push(oldValue);
+      }
+      allOptions.forEach(function(opt) {
+        var optEl = document.createElement('option');
+        optEl.value = opt;
+        optEl.textContent = opt;
+        if (opt === oldValue) {
+          optEl.selected = true;
+        }
+        control.appendChild(optEl);
+      });
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.value = oldValue;
+    }
+    control.className = 'inline-cell-input';
+    control.value = oldValue;
+
+    cell.textContent = '';
+    cell.classList.add('cell-editing');
+    cell.appendChild(control);
+
+    inlineEditState = {
+      cell: cell,
+      input: control,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      oldValue: oldValue,
+      saving: false
+    };
+
+    var state = inlineEditState;
+
+    var commit = function() {
+      if (!inlineEditState || inlineEditState !== state || state.saving) {
+        return;
+      }
+      saveInlineEdit(state, control.value);
+    };
+
+    var cancel = function() {
+      if (!inlineEditState || inlineEditState !== state || state.saving) {
+        return;
+      }
+      state.cell.textContent = state.oldValue;
+      clearInlineEditState();
+    };
+
+    control.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancel();
+      }
+    });
+
+    control.addEventListener('blur', function() {
+      commit();
+    });
+
+    control.focus();
+    if (control.select) {
+      control.select();
+    }
+  }
+
+  function resetCreateForm() {
+    var defaults = currentHeaders.map(function(header) {
+      return getDefaultValueForHeader(header);
+    });
+    modalBodyEl.innerHTML = renderRecordForm(defaults);
+    refreshSesionSoloPagoOptions();
+    modalSaveEl.textContent = 'Crear';
+    var firstInput = modalBodyEl.querySelector('input, select');
+    if (firstInput) {
+      firstInput.focus();
+    }
+  }
+
+  function openCreateModal() {
+    modalMode = 'create';
+    editingRowIndex = -1;
+    openModal('Nuevo registro - ' + currentModuleName);
+    resetCreateForm();
+  }
+
+  function saveEdit() {
+    if (!validarCamposNumericosDelModal()) {
+      return;
+    }
+
+    var values = collectModalValues();
+
+    var dup = findDuplicateRow(values, editingRowIndex);
+    if (dup) {
+      showError('No se puede guardar: este registro ya existe en la fila ' + (dup.sourceIndex + 2) + '. Coincide fecha, hora, fisio y el resto de campos.');
+      return;
+    }
+
+    var payload = buildSourceRowValuesFromVisible(editingRowIndex, values);
+
+    google.script.run
+      .withSuccessHandler(function() {
+        closeModal();
+        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo guardar el registro.');
+      })
+      .actualizarRegistro(currentToken, currentModuleId, toRealRowIndex(editingRowIndex), payload);
+  }
+
+  function saveCreate() {
+    if (!validarCamposNumericosDelModal()) {
+      return;
+    }
+
+    var values = collectModalValues();
+
+    var dup = findDuplicateRow(values, -1);
+    if (dup) {
+      showError('No se puede crear: ya existe un registro identico en la fila ' + (dup.sourceIndex + 2) + '. Coinciden fecha, hora, fisio y el resto de campos.');
+      return;
+    }
+
+    var payload = buildSourceRowValuesFromVisible(null, values);
+
+    modalSaveEl.disabled = true;
+    google.script.run
+      .withSuccessHandler(function() {
+        modalSaveEl.disabled = false;
+        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
+        cargarCalendario();
+        resetCreateForm();
+        modalSaveEl.textContent = 'Creado';
+        setTimeout(function() {
+          if (modalMode === 'create') {
+            modalSaveEl.textContent = 'Crear';
+          }
+        }, 900);
+      })
+      .withFailureHandler(function(err) {
+        modalSaveEl.disabled = false;
+        showError((err && err.message) ? err.message : 'No se pudo crear el registro.');
+      })
+      .crearRegistro(currentToken, currentModuleId, payload);
+  }
+
+  function deleteRow(rowIndex) {
+    if (!confirm('¿Eliminar este registro?')) {
+      return;
+    }
+
+    var realIndex = toRealRowIndex(rowIndex);
+    clearError();
+
+    refreshCurrentModuleData(function() {
+      var localIndex = sourceRowIndexMap.indexOf(realIndex);
+      if (localIndex === -1) {
+        showError('Este registro ya no existe: puede que otra persona lo haya eliminado ya. Se ha actualizado la tabla.');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
+            try {
+              cargarCalendario();
+            } catch (e) {}
+          });
+        })
+        .withFailureHandler(function(err) {
+          showError((err && err.message) ? err.message : 'No se pudo eliminar el registro.');
+        })
+        .eliminarRegistro(currentToken, currentModuleId, realIndex);
+    });
+  }
+
+  function openInvoiceModal(rowIndex) {
+    editingRowIndex = rowIndex;
+    modalMode = 'invoice';
+    openModal('Factura - ' + currentModuleName);
+
+    google.script.run
+      .withSuccessHandler(function(datos) {
+        var html = '';
+        html += '<div class="form-grid">';
+        html += '<label>Nombre cliente</label><input id="inv-nombre" type="text" value="' + escapeHtml(datos.nombre || '') + '">';
+        html += '<label>DNI/NIF</label><input id="inv-dni" type="text" value="' + escapeHtml(datos.dni || '') + '">';
+        html += '<label>Direccion</label><input id="inv-direccion" type="text" value="' + escapeHtml(datos.direccion || '') + '">';
+        html += '<label>Concepto</label><input id="inv-concepto" type="text" value="' + escapeHtml(datos.concepto || '') + '">';
+        html += '<label>Base</label><input id="inv-importe" type="text" value="' + escapeHtml(datos.importe || '') + '">';
+        html += '<label>% IVA</label><input id="inv-iva" type="number" step="any" value="' + escapeHtml(datos.ivaPorcentaje || 0) + '">';
+        html += '<label>% IRPF</label><input id="inv-irpf" type="number" step="any" value="' + escapeHtml(datos.irpfPorcentaje || 15) + '">';
+        html += '<label>Tu NIF</label><input id="inv-nif" type="text" value="' + escapeHtml(datos.emisorNif || '') + '">';
+        html += '<label>Fecha</label><input id="inv-fecha" type="text" value="' + escapeHtml(datos.fecha || '') + '">';
+        html += '<label>Numero factura</label><input id="inv-numero" type="text" value="' + escapeHtml(datos.numeroFactura || '') + '">';
+        html += '</div>';
+        modalBodyEl.innerHTML = html;
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudieron cargar datos de factura.');
+        closeModal();
+      })
+      .abrirFormularioFactura(currentToken, currentModuleId, toRealRowIndex(rowIndex));
+  }
+
+  function saveInvoice() {
+    var payload = {
+      nombre: document.getElementById('inv-nombre').value,
+      dni: document.getElementById('inv-dni').value,
+      direccion: document.getElementById('inv-direccion').value,
+      concepto: document.getElementById('inv-concepto').value,
+      importe: document.getElementById('inv-importe').value,
+      ivaPorcentaje: document.getElementById('inv-iva').value,
+      irpfPorcentaje: document.getElementById('inv-irpf').value,
+      emisorNif: document.getElementById('inv-nif').value,
+      fecha: document.getElementById('inv-fecha').value,
+      numeroFactura: document.getElementById('inv-numero').value
+    };
+
+    google.script.run
+      .withSuccessHandler(function(file) {
+        var a = document.createElement('a');
+        a.href = 'data:' + file.mimeType + ';base64,' + file.contentBase64;
+        a.download = file.fileName;
+        a.click();
+        closeModal();
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo generar la factura.');
+      })
+      .generarFacturaDesdeFormulario(currentToken, currentModuleId, payload);
+  }
+
+  function openExportColumnsModal() {
+    if (!currentHeaders.length) {
+      showError('No hay datos para exportar.');
+      return;
+    }
+
+    modalMode = 'export-columns';
+    openModal('Exportar Excel - seleccionar columnas');
+    modalSaveEl.textContent = 'Exportar';
+
+    var html = '<div class="export-cols">';
+    currentHeaders.forEach(function(header, idx) {
+      html += '<label class="export-col-item">';
+      html += '<input type="checkbox" data-export-col="' + idx + '" checked> ';
+      html += '<span>' + escapeHtml(header) + '</span>';
+      html += '</label>';
+    });
+    html += '</div>';
+    modalBodyEl.innerHTML = html;
+  }
+
+  function exportFilteredExcel() {
+    var checks = Array.prototype.slice.call(modalBodyEl.querySelectorAll('[data-export-col]:checked'));
+    if (!checks.length) {
+      showError('Selecciona al menos una columna para exportar.');
+      return;
+    }
+
+    var selectedIndexes = checks.map(function(chk) {
+      return Number(chk.getAttribute('data-export-col'));
+    });
+
+    var selectedHeaders = selectedIndexes.map(function(idx) {
+      return currentHeaders[idx];
+    });
+
+    var selectedRows = filteredRows.map(function(wrapper) {
+      return selectedIndexes.map(function(idx) {
+        return wrapper.data[idx];
+      });
+    });
+
+    var selectedAmountIdx = selectedIndexes.indexOf(amountColIdx);
+    var selectedTotal = selectedAmountIdx >= 0 ? filteredTotalAmount : null;
+
+    var payload = {
+      headers: selectedHeaders,
+      rows: selectedRows,
+      amountColIdx: selectedAmountIdx,
+      totalAmount: selectedTotal,
+      title: currentModuleName
+    };
+
+    google.script.run
+      .withSuccessHandler(function(file) {
+        var a = document.createElement('a');
+        a.href = 'data:' + file.mimeType + ';base64,' + file.contentBase64;
+        a.download = file.fileName;
+        a.click();
+        closeModal();
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo exportar a Excel.');
+      })
+      .exportarFiltradoExcel(currentToken, currentModuleId, payload);
+  }
+
+  function moduleLabel(appId) {
+    var btn = appButtons.filter(function(b) { return b.getAttribute('data-app-id') === appId; })[0];
+    return btn ? btn.getAttribute('data-app-name') : appId;
+  }
+
+  function renderManageUsersBody(users) {
+    var html = '<h4>Usuarios existentes</h4>';
+    html += '<table class="users-table"><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Modulos</th><th>Filtro fisio</th><th></th></tr></thead><tbody>';
+    users.forEach(function(u) {
+      var modsLabel = (u.modules || []).map(moduleLabel).join(', ');
+      html += '<tr><td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.nombre) + '</td>';
+      html += '<td>' + (u.role === 'admin' ? 'Administrador' : 'Estandar') + '</td>';
+      html += '<td>' + escapeHtml(modsLabel) + '</td><td>' + escapeHtml(u.fisioFiltro || '-') + '</td>';
+      html += '<td><button type="button" class="btn ghost" data-change-password="' + escapeHtml(u.username) + '">Cambiar contrasena</button> ';
+      html += '<button type="button" class="btn ghost" data-delete-user="' + escapeHtml(u.username) + '">Eliminar</button></td></tr>';
+    });
+    html += '</tbody></table>';
+
+    html += '<h4>Nuevo usuario</h4>';
+    html += '<div id="user-create-error" class="error-box" hidden></div>';
+    html += '<div class="form-grid">';
+    html += '<label>Usuario</label><input id="new-user-username" type="text" autocomplete="off">';
+    html += '<label>Contrasena</label><input id="new-user-password" type="password" autocomplete="new-password">';
+    html += '<label>Nombre para mostrar</label><input id="new-user-nombre" type="text">';
+    html += '<label>Rol</label><select id="new-user-role"><option value="fisio">Estandar (solo modulos marcados)</option><option value="admin">Administrador (ve todo)</option></select>';
+    html += '<label>Modulos con acceso</label><div class="modules-checkboxes">';
+    appButtons.forEach(function(btn) {
+      html += '<label class="checkbox-item"><input type="checkbox" class="new-user-module" value="' + escapeHtml(btn.getAttribute('data-app-id')) + '"> ' + escapeHtml(btn.getAttribute('data-app-name')) + '</label>';
+    });
+    html += '</div>';
+    html += '<label>Filtrar filas por Fisio_de_sesion (opcional)</label><input id="new-user-fisio" type="text" placeholder="Ej: Paula (vacio = ve todas las filas)">';
+    html += '</div>';
+    return html;
+  }
+
+  function openManageUsersModal() {
+    modalMode = 'manage-users';
+    openModal('Gestion de usuarios');
+    modalSaveEl.textContent = 'Crear usuario';
+    modalBodyEl.innerHTML = '<p>Cargando...</p>';
+
+    google.script.run
+      .withSuccessHandler(function(users) {
+        if (modalMode !== 'manage-users') {
+          return;
+        }
+        modalBodyEl.innerHTML = renderManageUsersBody(users || []);
+      })
+      .withFailureHandler(function(err) {
+        modalBodyEl.innerHTML = '<div class="error-box">' + escapeHtml((err && err.message) || 'No se pudo cargar la lista de usuarios.') + '</div>';
+      })
+      .listarUsuarios(currentToken);
+  }
+
+  function createUserFromModal() {
+    var errorEl = document.getElementById('user-create-error');
+    errorEl.hidden = true;
+
+    var username = document.getElementById('new-user-username').value.trim();
+    var password = document.getElementById('new-user-password').value;
+    var nombre = document.getElementById('new-user-nombre').value.trim();
+    var role = document.getElementById('new-user-role').value;
+    var fisioFiltro = document.getElementById('new-user-fisio').value.trim();
+    var modules = Array.prototype.slice.call(modalBodyEl.querySelectorAll('.new-user-module:checked')).map(function(chk) {
+      return chk.value;
+    });
+
+    if (!username || !password || !nombre) {
+      errorEl.textContent = 'Usuario, contrasena y nombre son obligatorios.';
+      errorEl.hidden = false;
+      return;
+    }
+    if (!modules.length) {
+      errorEl.textContent = 'Selecciona al menos un modulo.';
+      errorEl.hidden = false;
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function() {
+        openManageUsersModal();
+      })
+      .withFailureHandler(function(err) {
+        errorEl.textContent = (err && err.message) ? err.message : 'No se pudo crear el usuario.';
+        errorEl.hidden = false;
+      })
+      .crearUsuario(currentToken, {
+        username: username,
+        password: password,
+        nombre: nombre,
+        role: role,
+        modules: modules,
+        fisioFiltro: fisioFiltro
+      });
+  }
+
+  tableEl.addEventListener('click', function(event) {
+    var dupTh = event.target.closest('th[data-sort-dup]');
+    if (dupTh) {
+      if (sortColumnIndex === -2) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumnIndex = -2;
+        sortDirection = 'asc';
+      }
+      refreshTableView();
+      return;
+    }
+
+    var th = event.target.closest('th[data-sort-col]');
+    if (th) {
+      var col = Number(th.getAttribute('data-sort-col'));
+      if (sortColumnIndex === col) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumnIndex = col;
+        sortDirection = 'asc';
+      }
+      refreshTableView();
+      return;
+    }
+
+    var button = event.target.closest('button[data-action]');
+    if (!button) {
+      return;
+    }
+    var action = button.getAttribute('data-action');
+    var rowIndex = Number(button.getAttribute('data-row'));
+    if (action === 'edit') {
+      openEditModal(rowIndex);
+    } else if (action === 'delete') {
+      deleteRow(rowIndex);
+    } else if (action === 'invoice') {
+      openInvoiceModal(rowIndex);
+    }
+  });
+
+  tableEl.addEventListener('dblclick', function(event) {
+    var cell = event.target.closest('td[data-edit-row][data-edit-col]');
+    if (!cell) {
+      return;
+    }
+
+    var rowIndex = Number(cell.getAttribute('data-edit-row'));
+    var colIndex = Number(cell.getAttribute('data-edit-col'));
+    if (isNaN(rowIndex) || isNaN(colIndex)) {
+      return;
+    }
+
+    startInlineCellEdit(cell, rowIndex, colIndex);
+  });
+
+  if (supportsTouch) {
+    tableEl.addEventListener('touchstart', function(event) {
+      var touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) {
+        return;
+      }
+
+      var cell = event.target.closest('td[data-edit-row][data-edit-col]');
+      touchTapState = {
+        cell: cell,
+        x: touch.clientX,
+        y: touch.clientY,
+        at: Date.now()
+      };
+    }, { passive: true });
+
+    tableEl.addEventListener('touchend', function(event) {
+      var touch = event.changedTouches && event.changedTouches[0];
+      if (!touch || !touchTapState || !touchTapState.cell) {
+        touchTapState = null;
+        return;
+      }
+
+      var cell = event.target.closest('td[data-edit-row][data-edit-col]');
+      var movedX = Math.abs(touch.clientX - touchTapState.x);
+      var movedY = Math.abs(touch.clientY - touchTapState.y);
+      var elapsed = Date.now() - touchTapState.at;
+      var sameCell = cell && (cell === touchTapState.cell);
+
+      touchTapState = null;
+
+      if (!sameCell || movedX > 12 || movedY > 12 || elapsed > 450) {
+        return;
+      }
+
+      var rowIndex = Number(cell.getAttribute('data-edit-row'));
+      var colIndex = Number(cell.getAttribute('data-edit-col'));
+      if (isNaN(rowIndex) || isNaN(colIndex)) {
+        return;
+      }
+
+      startInlineCellEdit(cell, rowIndex, colIndex);
+    });
+  }
+
+  function ensurePdfLibLoaded() {
+    return new Promise(function(resolve, reject) {
+      if (window.PDFLib) {
+        resolve();
+        return;
+      }
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+      script.onload = resolve;
+      script.onerror = function() {
+        reject(new Error('No se pudo cargar la libreria para unir PDFs. Comprueba la conexion e intentalo de nuevo.'));
+      };
+      (document.head || document.documentElement).appendChild(script);
+    });
+  }
+
+  function showMergeError(text) {
+    var box = modalBodyEl.querySelector('#merge-error');
+    if (box) {
+      box.textContent = text;
+      box.hidden = false;
+    }
+  }
+
+  function clearMergeError() {
+    var box = modalBodyEl.querySelector('#merge-error');
+    if (box) {
+      box.hidden = true;
+      box.textContent = '';
+    }
+  }
+
+  function renderMergePdfsBody() {
+    return '<p class="merge-hint">Elige varios PDFs desde este dispositivo. Los podras reordenar antes de unirlos.</p>' +
+      '<input type="file" id="merge-file-input" accept="application/pdf,.pdf" multiple>' +
+      '<div id="merge-file-list" class="merge-file-list"></div>' +
+      '<div id="merge-error" class="error-box" hidden></div>';
+  }
+
+  function renderFileItems(items, prefix) {
+    var html = '';
+    items.forEach(function(f, i) {
+      var kb = Math.max(1, Math.round((f.size || 0) / 1024));
+      html += '<div class="merge-file-item">';
+      html += '<span class="merge-file-name">' + escapeHtml(f.name) + ' (' + kb + ' KB)</span>';
+      html += '<span class="merge-file-actions">';
+      html += '<button type="button" class="btn tiny ghost" data-' + prefix + '-up="' + i + '" title="Subir">&#8593;</button>';
+      html += '<button type="button" class="btn tiny ghost" data-' + prefix + '-down="' + i + '" title="Bajar">&#8595;</button>';
+      html += '<button type="button" class="btn tiny danger" data-' + prefix + '-remove="' + i + '" title="Quitar">&#10005;</button>';
+      html += '</span></div>';
+    });
+    return html;
+  }
+
+  function refreshMergeFileList() {
+    var box = modalBodyEl.querySelector('#merge-file-list');
+    if (!box) {
+      return;
+    }
+    if (!currentMergeFiles.length) {
+      box.innerHTML = '<p class="merge-empty">Sin archivos seleccionados.</p>';
+      return;
+    }
+    box.innerHTML = renderFileItems(currentMergeFiles, 'merge');
+  }
+
+  function refreshConvertFileList() {
+    var box = modalBodyEl.querySelector('#convert-file-list');
+    if (!box) {
+      return;
+    }
+    if (!currentConvertImages.length) {
+      box.innerHTML = '<p class="merge-empty">Sin imagenes seleccionadas.</p>';
+      return;
+    }
+    box.innerHTML = renderFileItems(currentConvertImages, 'convert');
+  }
+
+  function moveMergeFile(index, delta) {
+    moveInArray(currentMergeFiles, index, delta);
+    refreshMergeFileList();
+  }
+
+  function removeMergeFile(index) {
+    removeFromArray(currentMergeFiles, index);
+    refreshMergeFileList();
+  }
+
+  function moveConvertFile(index, delta) {
+    moveInArray(currentConvertImages, index, delta);
+    refreshConvertFileList();
+  }
+
+  function removeConvertFile(index) {
+    removeFromArray(currentConvertImages, index);
+    refreshConvertFileList();
+  }
+
+  function moveInArray(arr, index, delta) {
+    var to = index + delta;
+    if (to < 0 || to >= arr.length) {
+      return;
+    }
+    var tmp = arr[index];
+    arr[index] = arr[to];
+    arr[to] = tmp;
+  }
+
+  function removeFromArray(arr, index) {
+    arr.splice(index, 1);
+  }
+
+  function openPdfToolsModal() {
+    modalMode = 'pdf-menu';
+    openModal('Herramientas PDF');
+    modalBodyEl.innerHTML =
+      '<p class="merge-hint">Elige una herramienta:</p>' +
+      '<button type="button" class="btn pdf-menu-btn" data-pdf-tool="merge">Unir PDFs</button>' +
+      '<button type="button" class="btn pdf-menu-btn" data-pdf-tool="convert">Convertir imagenes a PDF</button>';
+    modalSaveEl.hidden = true;
+  }
+
+  function openMergePdfsModal() {
+    modalMode = 'merge-pdfs';
+    currentMergeFiles = [];
+    openModal('Unir PDFs');
+    modalSaveEl.hidden = false;
+    modalBodyEl.innerHTML = '<p>Cargando...</p>';
+    modalSaveEl.textContent = 'Unir y descargar';
+
+    ensurePdfLibLoaded()
+      .then(function() {
+        if (modalMode !== 'merge-pdfs') {
+          return;
+        }
+        modalBodyEl.innerHTML = renderMergePdfsBody();
+        refreshMergeFileList();
+        var input = modalBodyEl.querySelector('#merge-file-input');
+        if (input) {
+          input.addEventListener('change', function() {
+            currentMergeFiles = currentMergeFiles.concat(Array.prototype.slice.call(input.files || []));
+            refreshMergeFileList();
+          });
+        }
+      })
+      .catch(function(err) {
+        if (modalMode !== 'merge-pdfs') {
+          return;
+        }
+        showError((err && err.message) ? err.message : 'No se pudo preparar el unidor de PDFs.');
+        closeModal();
+      });
+  }
+
+  function openConvertPdfModal() {
+    modalMode = 'convert-pdf';
+    currentConvertImages = [];
+    openModal('Convertir a PDF');
+    modalSaveEl.hidden = false;
+    modalBodyEl.innerHTML = '<p>Cargando...</p>';
+    modalSaveEl.textContent = 'Convertir y descargar';
+
+    ensurePdfLibLoaded()
+      .then(function() {
+        if (modalMode !== 'convert-pdf') {
+          return;
+        }
+        modalBodyEl.innerHTML =
+          '<p class="merge-hint">Elige imagenes JPG o PNG. Cada imagen sera una pagina del PDF.</p>' +
+          '<input type="file" id="convert-file-input" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple>' +
+          '<div id="convert-file-list" class="merge-file-list"></div>' +
+          '<div id="merge-error" class="error-box" hidden></div>';
+        refreshConvertFileList();
+        var input = modalBodyEl.querySelector('#convert-file-input');
+        if (input) {
+          input.addEventListener('change', function() {
+            currentConvertImages = currentConvertImages.concat(Array.prototype.slice.call(input.files || []));
+            refreshConvertFileList();
+          });
+        }
+      })
+      .catch(function(err) {
+        if (modalMode !== 'convert-pdf') {
+          return;
+        }
+        showError((err && err.message) ? err.message : 'No se pudo preparar el conversor de PDF.');
+        closeModal();
+      });
+  }
+
+  function convertSelectedImages() {
+    clearMergeError();
+    if (!currentConvertImages.length) {
+      showMergeError('Selecciona al menos una imagen.');
+      return;
+    }
+
+    modalSaveEl.disabled = true;
+    var prevText = modalSaveEl.textContent;
+    modalSaveEl.textContent = 'Convirtiendo...';
+
+    Promise.resolve()
+      .then(function() {
+        return convertirImagenesEnNavegador();
+      })
+      .then(function() {
+        modalSaveEl.disabled = false;
+        modalSaveEl.textContent = 'Convertido';
+        setTimeout(function() {
+          if (modalMode === 'convert-pdf') {
+            modalSaveEl.textContent = 'Convertir y descargar';
+          }
+        }, 1200);
+      })
+      .catch(function(err) {
+        modalSaveEl.disabled = false;
+        modalSaveEl.textContent = prevText || 'Convertir y descargar';
+        showMergeError((err && err.message) ? err.message : 'No se pudieron convertir las imagenes.');
+      });
+  }
+
+  function descargarBlobPdf(bytes, nombre) {
+    var blob = new Blob([bytes], { type: 'application/pdf' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    a.click();
+    setTimeout(function() {
+      URL.revokeObjectURL(url);
+    }, 4000);
+  }
+
+  function mergeSelectedPdfs() {
+    clearMergeError();
+    if (!currentMergeFiles.length) {
+      showMergeError('Selecciona al menos un PDF para unir.');
+      return;
+    }
+
+    modalSaveEl.disabled = true;
+    var prevText = modalSaveEl.textContent;
+    modalSaveEl.textContent = 'Uniendo...';
+
+    Promise.resolve()
+      .then(function() {
+        return unirPdfsEnNavegador();
+      })
+      .then(function() {
+        modalSaveEl.disabled = false;
+        modalSaveEl.textContent = 'Unidos';
+        setTimeout(function() {
+          if (modalMode === 'merge-pdfs') {
+            modalSaveEl.textContent = 'Unir y descargar';
+          }
+        }, 1200);
+      })
+      .catch(function(err) {
+        modalSaveEl.disabled = false;
+        modalSaveEl.textContent = prevText || 'Unir y descargar';
+        showMergeError((err && err.message) ? err.message : 'No se pudieron unir los PDFs.');
+      });
+  }
+
+  function unirPdfsEnNavegador() {
+    if (!window.PDFLib) {
+      throw new Error('La libreria PDF no esta disponible.');
+    }
+    return PDFLib.PDFDocument.create().then(function(nuevo) {
+      var chain = Promise.resolve(nuevo);
+      currentMergeFiles.forEach(function(file) {
+        chain = chain
+          .then(function() {
+            return file.arrayBuffer();
+          })
+          .then(function(bytes) {
+            return PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+          })
+          .then(function(src) {
+            return nuevo.copyPages(src, src.getPageIndices());
+          })
+          .then(function(pages) {
+            pages.forEach(function(page) {
+              nuevo.addPage(page);
+            });
+            return nuevo;
+          });
+      });
+      return chain;
+    })
+      .then(function(nuevo) {
+        return nuevo.save();
+      })
+      .then(function(bytes) {
+        descargarBlobPdf(bytes, 'PDFs_unidos_' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.pdf');
+      });
+  }
+
+  function convertirImagenesEnNavegador() {
+    if (!window.PDFLib) {
+      throw new Error('La libreria PDF no esta disponible.');
+    }
+    return PDFLib.PDFDocument.create().then(function(doc) {
+      var chain = Promise.resolve(doc);
+      currentConvertImages.forEach(function(file) {
+        chain = chain
+          .then(function() {
+            return file.arrayBuffer();
+          })
+          .then(function(bytes) {
+            var nombre = String(file.name || '').toLowerCase();
+            var tipo = String(file.type || '');
+            if (tipo.indexOf('png') !== -1 || /\.png$/.test(nombre)) {
+              return doc.embedPng(bytes);
+            }
+            return doc.embedJpg(bytes);
+          })
+          .then(function(image) {
+            var page = doc.addPage([image.width, image.height]);
+            page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+            return doc;
+          });
+      });
+      return chain;
+    })
+      .then(function(doc) {
+        return doc.save();
+      })
+      .then(function(bytes) {
+        descargarBlobPdf(bytes, 'Imagenes_a_PDF_' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.pdf');
+      });
+  }
+
+  modalSaveEl.addEventListener('click', function() {
+    if (modalMode === 'edit') {
+      saveEdit();
+    } else if (modalMode === 'create') {
+      saveCreate();
+    } else if (modalMode === 'export-columns') {
+      exportFilteredExcel();
+    } else if (modalMode === 'invoice') {
+      saveInvoice();
+    } else if (modalMode === 'manage-users') {
+      createUserFromModal();
+    } else if (modalMode === 'merge-pdfs') {
+      mergeSelectedPdfs();
+    } else if (modalMode === 'convert-pdf') {
+      convertSelectedImages();
+    }
+  });
+
+  modalCloseEl.addEventListener('click', closeModal);
+  modalCancelEl.addEventListener('click', closeModal);
+
+  modalBodyEl.addEventListener('click', function(event) {
+    var changePassBtn = event.target.closest('[data-change-password]');
+    if (changePassBtn && modalMode === 'manage-users') {
+      var targetUser = changePassBtn.getAttribute('data-change-password');
+      var nuevaContrasena = prompt('Nueva contrasena para ' + targetUser + ':');
+      if (nuevaContrasena == null) {
+        return;
+      }
+      if (!nuevaContrasena.trim()) {
+        showError('La contrasena no puede estar vacia.');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          openManageUsersModal();
+        })
+        .withFailureHandler(function(err) {
+          showError((err && err.message) ? err.message : 'No se pudo cambiar la contrasena.');
+        })
+        .cambiarContrasenaUsuario(currentToken, targetUser, nuevaContrasena);
+      return;
+    }
+  });
+
+  function dosDigitos(n) {
+    return ('0' + n).slice(-2);
+  }
+
+  function inicializarCalendario() {
+    const ahora = new Date();
+    calYear = ahora.getFullYear();
+    calMonth = ahora.getMonth();
+    calSesiones = [];
+    calFiltro = '';
+
+    calModuleFilterEl.innerHTML = '';
+    if (currentUserRole === 'admin') {
+      calModuleFilterEl.hidden = false;
+      calModuleFilterEl.addEventListener('change', function() {
+        calFiltro = calModuleFilterEl.value;
+        cargarCalendario();
+      });
+      const opciones = [];
+      opciones.push('<option value="">Todos</option>');
+      appButtons.forEach(function(btn) {
+        opciones.push('<option value="' + escapeHtml(btn.getAttribute('data-app-id')) + '">' + escapeHtml(btn.getAttribute('data-app-name')) + '</option>');
+      });
+      calModuleFilterEl.innerHTML = opciones.join('');
+      calFiltro = calModuleFilterEl.value;
+    } else {
+      calModuleFilterEl.hidden = true;
+    }
+
+    calendarBoxEl.hidden = false;
+    cargarCalendario();
+  }
+
+  function cargarCalendario() {
+    if (!currentToken || calYear < 0) {
+      return;
+    }
+    const mesNum = calMonth + 1;
+    const desde = calYear + '-' + dosDigitos(mesNum) + '-01';
+    const hasta = calYear + '-' + dosDigitos(mesNum) + '-' + dosDigitos(new Date(calYear, calMonth + 1, 0).getDate());
+    google.script.run
+      .withSuccessHandler(function(result) {
+        calSesiones = (result && result.sesiones) || [];
+        pintarCalendario();
+      })
+      .withFailureHandler(function() {
+        calSesiones = [];
+        pintarCalendario();
+      })
+      .obtenerSesionesCalendario(currentToken, desde, hasta, calFiltro);
+  }
+
+  function pintarCalendario() {
+    const nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    calTitleEl.textContent = nombres[calMonth] + ' ' + calYear;
+
+    const contador = {};
+    calSesiones.forEach(function(s) {
+      contador[s.fecha] = (contador[s.fecha] || 0) + 1;
+    });
+
+    const hoy = new Date();
+    const hoyKey = hoy.getFullYear() + '-' + dosDigitos(hoy.getMonth() + 1) + '-' + dosDigitos(hoy.getDate());
+
+    const semanaInicio = (new Date(calYear, calMonth, 1).getDay() + 6) % 7;
+    const diasEnMes = new Date(calYear, calMonth + 1, 0).getDate();
+
+    let html = '';
+    ['L', 'M', 'X', 'J', 'V', 'S', 'D'].forEach(function(d) {
+      html += '<span class="cal-dw">' + d + '</span>';
+    });
+    for (let i = 0; i < semanaInicio; i++) {
+      html += '<span class="cal-day blank"></span>';
+    }
+    for (let d = 1; d <= diasEnMes; d++) {
+      const key = calYear + '-' + dosDigitos(calMonth + 1) + '-' + dosDigitos(d);
+      const n = contador[key] || 0;
+      html += '<span class="cal-day' + (n > 0 ? ' has' : '') + (key === hoyKey ? ' today' : '') + '" data-cal-day="' + key + '">' + d +
+        (n > 0 ? '<em>' + n + '</em>' : '') + '</span>';
+    }
+    calGridEl.innerHTML = html;
+  }
+
+  function openSesionesDia(fechaKey) {
+    const lista = calSesiones.filter(function(s) {
+      return s.fecha === fechaKey;
+    }).sort(function(a, b) {
+      return String(a.hora || '').localeCompare(String(b.hora || ''));
+    });
+    if (!lista.length) {
+      return;
+    }
+    calDiaAbierto = fechaKey;
+    modalMode = 'calendar-day';
+    modalCardEl.classList.add('cal-modal');
+    openModal('Sesiones ' + fechaKey);
+    modalSaveEl.hidden = true;
+
+    let html = '<table class="cal-sesion-table"><tbody>';
+    lista.forEach(function(s, i) {
+      html += '<tr>';
+      html += '<td><button type="button" class="btn tiny ghost" data-cal-open-module="' + i + '" title="Abrir en el modulo">Ver</button></td>';
+      html += '<td class="cal-sesion-hora">' + escapeHtml(s.hora || '--:--') + '</td>';
+      html += '<td class="cal-sesion-cliente">' + escapeHtml(s.cliente || '?') + '</td>';
+      html += '<td class="cal-sesion-mod">' + escapeHtml(s.moduloNombre) + '</td>';
+      html += '<td>';
+      if (s.fisio) {
+        html += '<span class="cal-sesion-fisio">' + escapeHtml(s.fisio) + '</span>';
+      }
+      html += '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    modalBodyEl.innerHTML = html;
+  }
+
+  function abrirSesionModulo(index) {
+    const lista = calSesiones.filter(function(s) {
+      return s.fecha === calDiaAbierto;
+    }).sort(function(a, b) {
+      return String(a.hora || '').localeCompare(String(b.hora || ''));
+    });
+    const s = lista[index];
+    if (!s) {
+      return;
+    }
+    closeModal();
+    let allowsInvoice = false;
+    appButtons.forEach(function(btn) {
+      if (btn.getAttribute('data-app-id') === s.modulo) {
+        allowsInvoice = btn.getAttribute('data-allows-invoice') === 'true';
+      }
+    });
+    loadApp(s.modulo, s.moduloNombre, allowsInvoice, function() {
+      filterClientEl.value = s.cliente || '';
+      filterMonthFromEl.value = s.fecha;
+      filterMonthToEl.value = s.fecha;
+      refreshTableView();
+    });
+  }
+
+  calPrevEl.addEventListener('click', function() {
+    calMonth -= 1;
+    if (calMonth < 0) {
+      calMonth = 11;
+      calYear -= 1;
+    }
+    cargarCalendario();
+  });
+
+  calNextEl.addEventListener('click', function() {
+    calMonth += 1;
+    if (calMonth > 11) {
+      calMonth = 0;
+      calYear += 1;
+    }
+    cargarCalendario();
+  });
+
+  calGridEl.addEventListener('click', function(event) {
+    const celda = event.target.closest('[data-cal-day]');
+    if (celda) {
+      openSesionesDia(celda.getAttribute('data-cal-day'));
+    }
+  });
+
+  modalBodyEl.addEventListener('click', function(event) {
+    var abrirSes = event.target.closest('[data-cal-open-module]');
+    if (abrirSes && modalMode === 'calendar-day') {
+      abrirSesionModulo(Number(abrirSes.getAttribute('data-cal-open-module')));
+      return;
+    }
+
+    var toolBtn = event.target.closest('[data-pdf-tool]');
+    if (toolBtn && modalMode === 'pdf-menu') {
+      var tool = toolBtn.getAttribute('data-pdf-tool');
+      if (tool === 'merge') {
+        openMergePdfsModal();
+      } else if (tool === 'convert') {
+        openConvertPdfModal();
+      }
+      return;
+    }
+
+    var upBtn = event.target.closest('[data-merge-up]');
+    if (upBtn && modalMode === 'merge-pdfs') {
+      moveMergeFile(Number(upBtn.getAttribute('data-merge-up')), -1);
+      return;
+    }
+    var downBtn = event.target.closest('[data-merge-down]');
+    if (downBtn && modalMode === 'merge-pdfs') {
+      moveMergeFile(Number(downBtn.getAttribute('data-merge-down')), 1);
+      return;
+    }
+    var removeBtn = event.target.closest('[data-merge-remove]');
+    if (removeBtn && modalMode === 'merge-pdfs') {
+      removeMergeFile(Number(removeBtn.getAttribute('data-merge-remove')));
+      return;
+    }
+
+    var convUpBtn = event.target.closest('[data-convert-up]');
+    if (convUpBtn && modalMode === 'convert-pdf') {
+      moveConvertFile(Number(convUpBtn.getAttribute('data-convert-up')), -1);
+      return;
+    }
+    var convDownBtn = event.target.closest('[data-convert-down]');
+    if (convDownBtn && modalMode === 'convert-pdf') {
+      moveConvertFile(Number(convDownBtn.getAttribute('data-convert-down')), 1);
+      return;
+    }
+    var convRemoveBtn = event.target.closest('[data-convert-remove]');
+    if (convRemoveBtn && modalMode === 'convert-pdf') {
+      removeConvertFile(Number(convRemoveBtn.getAttribute('data-convert-remove')));
+      return;
+    }
+
+    var delBtn = event.target.closest('[data-delete-user]');
+    if (!delBtn || modalMode !== 'manage-users') {
+      return;
+    }
+
+    var username = delBtn.getAttribute('data-delete-user');
+    if (!confirm('¿Eliminar el usuario ' + username + '?')) {
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function() {
+        openManageUsersModal();
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo eliminar el usuario.');
+      })
+      .eliminarUsuario(currentToken, username);
+  });
+
+  modalBodyEl.addEventListener('change', function(event) {
+    var input = event.target.closest('[data-edit-col]');
+    if (!input) {
+      return;
+    }
+
+    var col = Number(input.getAttribute('data-edit-col'));
+    if (isNaN(col)) {
+      return;
+    }
+
+    var key = getHeaderKey(currentHeaders[col] || '');
+    if (/^quien_cobra$/.test(key)) {
+      refreshSesionSoloPagoOptions();
+    } else if (/^como_paga$/.test(key)) {
+      var paymentValue = normalize(String(input.value || ''));
+      if (paymentValue === 'efectivo') {
+        var operationIdx = -1;
+        currentHeaders.forEach(function(h, i) {
+          if (/numero operacion|numero de operacion|operacion/.test(getHeaderKey(h))) {
+            operationIdx = i;
+          }
+        });
+        if (operationIdx >= 0) {
+          var opInput = modalBodyEl.querySelector('[data-edit-col="' + operationIdx + '"]');
+          if (opInput && !String(opInput.value || '').trim()) {
+            opInput.value = '0';
+          }
+        }
+      }
+    }
+  });
+
+  refreshBtn.addEventListener('click', function() {
+    if (currentModuleId) {
+      loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
+    }
+  });
+
+  newRowBtn.addEventListener('click', function() {
+    if (!currentModuleId) {
+      showError('Selecciona primero un modulo.');
+      return;
+    }
+    openCreateModal();
+  });
+
+  exportExcelBtn.addEventListener('click', function() {
+    openExportColumnsModal();
+  });
+
+  [filterClientEl, filterMonthFromEl, filterMonthToEl, filterAmountMinEl, filterAmountMaxEl, filterSearchEl].forEach(function(input) {
+    input.addEventListener('input', function() {
+      refreshTableView();
+    });
+  });
+
+  filterPaymentEl.addEventListener('change', function() {
+    refreshTableView();
+  });
+
+  clearFiltersBtn.addEventListener('click', function() {
+    filterClientEl.value = '';
+    filterMonthFromEl.value = '';
+    filterMonthToEl.value = '';
+    filterAmountMinEl.value = '';
+    filterAmountMaxEl.value = '';
+    filterSearchEl.value = '';
+    filterPaymentEl.value = '';
+    problemRowsFilter = null;
+    refreshTableView();
+  });
+
+  function loadApp(appId, appName, allowsInvoice, onSuccess) {
+    document.body.classList.remove('theme-enmov', 'theme-navta', 'theme-domiciliaciones');
+    document.body.classList.add('theme-' + appId);
+
+    loadModule(appId, appName, allowsInvoice, onSuccess);
+  }
+
+  appButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      loadApp(
+        btn.getAttribute('data-app-id'),
+        btn.getAttribute('data-app-name'),
+        btn.getAttribute('data-allows-invoice') === 'true'
+      );
+    });
+  });
+
+  const loginOverlayEl = document.getElementById('login-overlay');
+  const loginFormEl = document.getElementById('login-form');
+  const appContentEl = document.getElementById('app-content');
+  const loginUsernameEl = document.getElementById('login-username');
+  const loginPasswordEl = document.getElementById('login-password');
+  const loginErrorEl = document.getElementById('login-error');
+  const loginSubmitBtn = document.getElementById('login-submit');
+  const currentUserNameEl = document.getElementById('current-user-name');
+  const logoutBtn = document.getElementById('btn-logout');
+  const manageUsersBtn = document.getElementById('btn-manage-users');
+  const mergePdfsBtn = document.getElementById('btn-merge-pdfs');
+  const calendarBoxEl = document.getElementById('calendar-box');
+  function showLoginError(text) {
+    loginErrorEl.textContent = text;
+    loginErrorEl.hidden = false;
+  }
+
+  function startFirstAllowedModule() {
+    const firstButton = appButtons.filter(function(btn) {
+      return !btn.hidden;
+    })[0];
+    if (firstButton) {
+      loadApp(
+        firstButton.getAttribute('data-app-id'),
+        firstButton.getAttribute('data-app-name'),
+        firstButton.getAttribute('data-allows-invoice') === 'true'
+      );
+    }
+  }
+
+  function applyModulePermissions(allowedModules) {
+    appButtons.forEach(function(btn) {
+      var appId = btn.getAttribute('data-app-id');
+      btn.hidden = allowedModules.indexOf(appId) === -1;
+    });
+  }
+
+  function entrarConSesion(token, nombre, role, modules) {
+    currentToken = token;
+    currentUserNombre = nombre;
+    currentUserRole = role;
+    currentUserNameEl.textContent = currentUserNombre;
+    loginOverlayEl.hidden = true;
+    appContentEl.hidden = false;
+    manageUsersBtn.hidden = role !== 'admin';
+    mergePdfsBtn.hidden = role !== 'admin';
+
+    applyModulePermissions(modules || []);
+    try {
+      inicializarCalendario();
+    } catch (e) {}
+
+    var urlParams = window.__APP_PARAMS__ || {};
+    var targetBtn = null;
+    if (urlParams.accion === 'nuevo' && urlParams.modulo) {
+      appButtons.forEach(function(btn) {
+        if (!targetBtn && btn.getAttribute('data-app-id') === urlParams.modulo && !btn.hidden) {
+          targetBtn = btn;
+        }
+      });
+    }
+    if (!targetBtn) {
+      appButtons.forEach(function(btn) {
+        if (!targetBtn && !btn.hidden) {
+          targetBtn = btn;
+        }
+      });
+    }
+
+    forceDuplicatePopupOnNextLoad = true;
+
+    if (targetBtn) {
+      loadApp(
+        targetBtn.getAttribute('data-app-id'),
+        targetBtn.getAttribute('data-app-name'),
+        targetBtn.getAttribute('data-allows-invoice') === 'true',
+        function() {
+          if (urlParams.accion === 'nuevo') {
+            openCreateModal();
+          }
+        }
+      );
+    } else {
+      startFirstAllowedModule();
+    }
+  }
+
+  function doLogin() {
+    if (doLogin.busy) {
+      return;
+    }
+    doLogin.busy = true;
+    loginErrorEl.hidden = true;
+    var username = loginUsernameEl.value;
+    var password = loginPasswordEl.value;
+    if (!username || !password) {
+      doLogin.busy = false;
+      showLoginError('Introduce usuario y contrasena.');
+      return;
+    }
+
+    loginSubmitBtn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function(result) {
+        doLogin.busy = false;
+        loginSubmitBtn.disabled = false;
+        if (!result || !result.ok) {
+          showLoginError((result && result.message) ? result.message : 'No se pudo iniciar sesion.');
+          return;
+        }
+
+        try {
+          localStorage.setItem(SESSION_STORAGE_KEY, result.token);
+        } catch (e) {}
+
+        loginPasswordEl.value = '';
+        entrarConSesion(result.token, result.nombre || username, result.role, result.modules);
+      })
+      .withFailureHandler(function(err) {
+        doLogin.busy = false;
+        loginSubmitBtn.disabled = false;
+        showLoginError((err && err.message) ? err.message : 'No se pudo iniciar sesion.');
+      })
+      .login(username, password);
+  }
+
+  function handleLoginSubmit(event) {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    doLogin();
+    return false;
+  }
+
+  function tryAutoLogin() {
+    var stored;
+    try {
+      stored = localStorage.getItem(SESSION_STORAGE_KEY);
+    } catch (e) {
+      stored = null;
+    }
+    if (!stored) {
+      loginUsernameEl.focus();
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(sesion) {
+        if (!sesion) {
+          authSessionInvalida();
+          return;
+        }
+        entrarConSesion(stored, sesion.nombre || sesion.username, sesion.role, sesion.modules);
+      })
+      .withFailureHandler(function() {
+        authSessionInvalida();
+      })
+      .verificarToken(stored);
+  }
+
+  function authSessionInvalida() {
+    try {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (e) {}
+    loginOverlayEl.hidden = false;
+    appContentEl.hidden = true;
+    loginUsernameEl.focus();
+  }
+
+  if (loginSubmitBtn) {
+    loginSubmitBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      doLogin();
+    });
+  }
+  if (loginUsernameEl) {
+    loginUsernameEl.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loginPasswordEl.focus();
+      }
+    });
+  }
+  if (loginPasswordEl) {
+    loginPasswordEl.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        doLogin();
+      }
+    });
+  }
+
+  logoutBtn.addEventListener('click', function() {
+    google.script.run.logout(currentToken);
+    try {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (e) {}
+    currentToken = null;
+    currentUserNombre = null;
+    currentUserRole = null;
+    currentModuleId = null;
+    appContentEl.hidden = true;
+    loginOverlayEl.hidden = false;
+    manageUsersBtn.hidden = true;
+    mergePdfsBtn.hidden = true;
+    calendarBoxEl.hidden = true;
+    loginUsernameEl.value = '';
+    loginPasswordEl.value = '';
+    loginUsernameEl.focus();
+  });
+
+  manageUsersBtn.addEventListener('click', function() {
+    openManageUsersModal();
+  });
+
+  mergePdfsBtn.addEventListener('click', function() {
+    openPdfToolsModal();
+  });
+
+  tryAutoLogin();
+})();
+</script>
