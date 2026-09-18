@@ -64,6 +64,7 @@
   let sortColumnIndex = -1;
   let sortDirection = 'asc';
   let duplicateGroupBySourceIndex = {};
+  let duplicateGroups = [];
   let currentMergeFiles = [];
   let currentConvertImages = [];
   let currentUserRole = null;
@@ -89,6 +90,7 @@
     duplicatesBoxEl.hidden = true;
     duplicatesBoxEl.textContent = '';
     duplicateGroupBySourceIndex = {};
+    duplicateGroups = [];
   }
 
   function escapeHtml(value) {
@@ -223,18 +225,18 @@
   }
 
 var COMBO_PRESETS = [
-    { label: 'Fisio · Sesion · Bono', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Bono' } },
-    { label: 'Fisio · Sesion · Tarjeta · 45€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '45' } },
-    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '50' } },
-    { label: 'Fisio · Bono · Tarjeta · 200€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
-    { label: 'Fisio Resp · Bono · Tarjeta · 240€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '240' } },
-    { label: 'Fisio · Bono · Efectivo · 200€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
-    { label: 'Pago · Bono · Tarjeta · 200€', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
-    { label: 'Pago · Bono · Efectivo · 200€', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
-    { label: 'Pilates · Bono · Tarjeta · 75€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '75' } },
-    { label: 'Pilates · Bono · Efectivo · 75€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '75' } },
-    { label: 'Pilates · Sesion · Tarjeta · 25€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '25' } },
-    { label: 'Pilates · Sesion · Efectivo · 25€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '25' } }
+    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', grupo: 'Fisio Resp', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '50' } },
+    { label: 'Fisio Resp · Bono · Tarjeta · 240€', grupo: 'Fisio Resp', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '240' } },
+    { label: 'Fisio · Sesion · Bono', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Bono' } },
+    { label: 'Fisio · Sesion · Tarjeta · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '45' } },
+    { label: 'Fisio · Bono · Tarjeta · 200€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
+    { label: 'Fisio · Bono · Efectivo · 200€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
+    { label: 'Pago · Bono · Tarjeta · 200€', grupo: 'Fisio', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
+    { label: 'Pago · Bono · Efectivo · 200€', grupo: 'Fisio', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
+    { label: 'Pilates · Bono · Tarjeta · 75€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '75' } },
+    { label: 'Pilates · Bono · Efectivo · 75€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '75' } },
+    { label: 'Pilates · Sesion · Tarjeta · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '25' } },
+    { label: 'Pilates · Sesion · Efectivo · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '25' } }
   ];
 
   function getPresetFieldIndex(fieldKey) {
@@ -270,7 +272,13 @@ var COMBO_PRESETS = [
     }
     var html = '<div class="combo-presets">';
     html += '<span class="combo-presets-title">Combinaciones frecuentes (rellenan los campos de un toque):</span>';
+    var lastGrupo = null;
     available.forEach(function(preset, index) {
+      var g = preset.grupo || '';
+      if (g !== lastGrupo) {
+        html += '<span class="combo-group-header">' + escapeHtml(g) + '</span>';
+        lastGrupo = g;
+      }
       var colorClass = preset.cat ? ' combo-' + escapeHtml(preset.cat) : '';
       html += '<button type="button" class="btn tiny combo-preset-btn' + colorClass + '" data-combo-preset="' + index + '" title="Rellena el formulario con: ' + escapeHtml(preset.label) + '">' + escapeHtml(preset.label) + '</button>';
     });
@@ -718,25 +726,31 @@ var COMBO_PRESETS = [
           return;
         }
 
-        for (var i = 0; i + 1 < rows.length; i += 2) {
-          var gid = duplicateGroupIndex;
-          duplicateGroupIndex += 1;
+        var gid = duplicateGroupIndex;
+        duplicateGroupIndex += 1;
 
-          duplicateGroupBySourceIndex[rows[i].sourceIndex] = gid;
-          duplicateGroupBySourceIndex[rows[i + 1].sourceIndex] = gid;
+        var filas = [];
+        var localIndexes = [];
+        rows.forEach(function(wrapper) {
+          duplicateGroupBySourceIndex[wrapper.sourceIndex] = gid;
+          filas.push(wrapper.sourceIndex + 2);
+          localIndexes.push(wrapper.sourceIndex);
+        });
 
-          var fila1 = rows[i].data;
-          var fila2 = rows[i + 1].data;
-          duplicatePairs.push({
-            group: gid,
-            baseKey: baseKey,
-            rows: [rows[i].sourceIndex + 2, rows[i + 1].sourceIndex + 2],
-            localIndexes: [rows[i].sourceIndex, rows[i + 1].sourceIndex],
-            cliente: clientColIdx >= 0 ? String(fila1[clientColIdx] || '') : '',
-            fila1: fila1,
-            fila2: fila2
-          });
-        }
+        var fila1 = rows[0].data;
+        var fila2 = rows[1].data;
+        var grupo = {
+          group: gid,
+          baseKey: baseKey,
+          rows: filas,
+          localIndexes: localIndexes,
+          total: rows.length,
+          cliente: clientColIdx >= 0 ? String(fila1[clientColIdx] || '') : '',
+          fila1: fila1,
+          fila2: fila2
+        };
+        duplicatePairs.push(grupo);
+        duplicateGroups.push(grupo);
       });
     });
 
@@ -752,16 +766,20 @@ var COMBO_PRESETS = [
       return;
     }
 
-    var details = duplicatePairs.slice(0, 4).map(function(pair) {
+    var groups = duplicatePairs.slice(0, 4);
+    var details = groups.map(function(pair) {
       var s = rowDataSummary(pair.fila1);
-      return 'D' + (pair.group + 1) + ': ' + s.fecha + ' ' + s.hora + ' ' + s.cliente + ' ' + s.cantidad + '€ (filas ' + pair.rows.join(', ') + ')';
+      var lbl = 'D' + (pair.group + 1) + ': ' + s.fecha + ' ' + s.hora + ' ' + s.cliente + ' ' + s.cantidad + '€ (filas ' + pair.rows.join(', ') + ' · ' + pair.total + ' filas)';
+      var btn = ' <button type="button" class="btn tiny danger" data-del-dup-group="' + pair.group + '" title="Elimina las ' + pair.total + ' filas de este grupo duplicado de una sola vez">Eliminar grupo</button>';
+      return lbl + btn;
     });
     var suffix = duplicatePairs.length > 4 ? ' ...' : '';
 
-    duplicatesBoxEl.textContent =
+    duplicatesBoxEl.innerHTML =
       'Aviso de duplicados: ' + duplicatePairs.length +
-      ' parejas repetidas. ' +
-      details.join(' | ') + suffix;
+      ' grupos repetidos. ' +
+      details.join(' | ') + suffix +
+      (duplicatePairs.length > 1 ? ' <button type="button" class="btn tiny danger" data-del-all-dups="1" title="Elimina todos los registros de los grupos duplicados">Eliminar todos</button>' : '');
     duplicatesBoxEl.hidden = false;
   }
 
@@ -1580,6 +1598,63 @@ var COMBO_PRESETS = [
       .crearRegistro(currentToken, currentModuleId, payload);
   }
 
+  function deleteDuplicateGroup(gid) {
+    var grupo = duplicateGroups[gid];
+    if (!grupo || !grupo.localIndexes || !grupo.localIndexes.length) {
+      return;
+    }
+    if (!confirm('¿Eliminar los ' + grupo.total + ' registros duplicados de este grupo (filas ' + grupo.rows.join(', ') + ')?')) {
+      return;
+    }
+    var realIndexes = grupo.localIndexes.map(function(local) {
+      return toRealRowIndex(local);
+    });
+    clearError();
+    google.script.run
+      .withSuccessHandler(function() {
+        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
+          try {
+            cargarCalendario();
+          } catch (e) {}
+        });
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudo eliminar el grupo duplicado.');
+      })
+      .eliminarRegistrosDuplicados(currentToken, currentModuleId, realIndexes);
+  }
+
+  function deleteAllDuplicateGroups() {
+    if (!duplicateGroups.length) {
+      return;
+    }
+    var totalFilas = duplicateGroups.reduce(function(acc, g) {
+      return acc + (g.localIndexes ? g.localIndexes.length : 0);
+    }, 0);
+    if (!confirm('¿Eliminar los ' + totalFilas + ' registros de todos los grupos duplicados?')) {
+      return;
+    }
+    var realIndexes = [];
+    duplicateGroups.forEach(function(g) {
+      (g.localIndexes || []).forEach(function(local) {
+        realIndexes.push(toRealRowIndex(local));
+      });
+    });
+    clearError();
+    google.script.run
+      .withSuccessHandler(function() {
+        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
+          try {
+            cargarCalendario();
+          } catch (e) {}
+        });
+      })
+      .withFailureHandler(function(err) {
+        showError((err && err.message) ? err.message : 'No se pudieron eliminar los duplicados.');
+      })
+      .eliminarRegistrosDuplicados(currentToken, currentModuleId, realIndexes);
+  }
+
   function deleteRow(rowIndex) {
     if (!confirm('¿Eliminar este registro?')) {
       return;
@@ -1868,6 +1943,18 @@ var COMBO_PRESETS = [
       deleteRow(rowIndex);
     } else if (action === 'invoice') {
       openInvoiceModal(rowIndex);
+    }
+  });
+
+  duplicatesBoxEl.addEventListener('click', function(event) {
+    var allBtn = event.target.closest('button[data-del-all-dups]');
+    if (allBtn) {
+      deleteAllDuplicateGroups();
+      return;
+    }
+    var btn = event.target.closest('button[data-del-dup-group]');
+    if (btn) {
+      deleteDuplicateGroup(Number(btn.getAttribute('data-del-dup-group')));
     }
   });
 
