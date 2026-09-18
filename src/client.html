@@ -86,6 +86,18 @@
     }
   }
 
+  function showSuccess(text) {
+    errorBoxEl.textContent = text;
+    errorBoxEl.hidden = false;
+    if (modalBodyEl && !modalBodyEl.hidden && modalOverlayEl && modalOverlayEl.classList && modalOverlayEl.classList.contains('modal-open')) {
+      errorBoxEl.classList.add('success-box-toast');
+      errorBoxEl.classList.remove('error-box-toast');
+    } else {
+      errorBoxEl.classList.remove('success-box-toast');
+      errorBoxEl.classList.add('error-box-toast');
+    }
+  }
+
   function clearError() {
     errorBoxEl.hidden = true;
     errorBoxEl.textContent = '';
@@ -422,9 +434,35 @@ var COMBO_PRESETS = [
     return 0;
   }
 
+  function getFormFieldOrder() {
+    var order = [];
+    var used = {};
+    function push(idx) {
+      if (idx >= 0 && !used[idx]) {
+        order.push(idx);
+        used[idx] = true;
+      }
+    }
+    push(clientColIdx);
+    push(amountColIdx);
+    push(operationColIdx);
+    for (var i = 0; i < currentHeaders.length; i++) {
+      if (!used[i]) {
+        order.push(i);
+        used[i] = true;
+      }
+    }
+    return order;
+  }
+
   function renderRecordForm(values) {
+    var order = getFormFieldOrder();
     var html = '<div class="form-grid">';
-    currentHeaders.forEach(function(header, i) {
+    order.forEach(function(i) {
+      var header = currentHeaders[i];
+      if (header == null) {
+        return;
+      }
       var currentValue = values && values[i] != null ? values[i] : '';
       if (isHiddenFormField(header)) {
         html += '<input type="hidden" data-edit-col="' + i + '" value="' + escapeHtml(safeValueOf(currentValue)) + '">';
@@ -1542,22 +1580,9 @@ var COMBO_PRESETS = [
 
     var values = collectModalValues();
 
-    var opError = validarOperacionTarjeta(values);
-    if (opError) {
-      showError(opError);
-      return;
-    }
-
-    var dup = findDuplicateRow(values, editingRowIndex);
-    if (dup) {
-      showError('No se puede guardar: este registro ya existe en la fila ' + (dup.sourceIndex + 2) + '. Coincide fecha, hora, fisio y el resto de campos.');
-      return;
-    }
-
-    var payload = buildSourceRowValuesFromVisible(editingRowIndex, values);
-
     google.script.run
       .withSuccessHandler(function() {
+        showSuccess('Edición guardada correctamente.');
         closeModal();
         loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
       })
@@ -1591,6 +1616,7 @@ var COMBO_PRESETS = [
     modalSaveEl.disabled = true;
     google.script.run
       .withSuccessHandler(function() {
+        showSuccess('Registro creado correctamente.');
         modalSaveEl.disabled = false;
         loadModule(currentModuleId, currentModuleName, currentAllowsInvoice);
         cargarCalendario();
