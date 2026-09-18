@@ -14,7 +14,7 @@ function responderBotWeb(token, pregunta) {
   fragmentos.push('Sesion de Fisio Respi = 50€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
   fragmentos.push('Sesion de Pilates = 25€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
   fragmentos.push('Bono de Fisio = 200€ (compra unica con Tarjeta o Efectivo).');
-  fragmentos.push('Bono de Fisio Respi = 240€ (compra unica con Tarjeta o Efectivo).');
+  fragmentos.push('Bono de Respi = 240€ (compra unica con Tarjeta o Efectivo).');
   fragmentos.push('Bono de Pilates = 75€ (compra unica con Tarjeta o Efectivo).');
 
   var nombreModulo = '';
