@@ -66,17 +66,29 @@ function responderBotWeb(token, pregunta) {
       if (filasHoy.length === 0) {
         fragmentos.push('No hay sesiones hoy.');
       } else {
-        fragmentos.push('Sesiones de hoy (' + filasHoy.length + '):');
-        for (var j = 0; j < filasHoy.length; j++) {
-          var detalle = [];
-          for (var c = 0; c < headers.length && c < 12; c++) {
-            var nomCol = headers[c];
-            var valor = filasHoy[j][c];
-            if (valor !== undefined && valor !== null && String(valor).trim() !== '') {
-              detalle.push(nomCol + '=' + String(valor).trim());
-            }
+        var fisioIdx = getColumnaFisioIdx(headers);
+        var cantidadIdx = getColumnaCantidadIdx(headers);
+        var pagoIdx = -1;
+        for (var ci = 0; ci < headers.length; ci++) {
+          if (normalizarTexto(headers[ci]).indexOf('como_paga') !== -1 || normalizarTexto(headers[ci]).indexOf('como paga') !== -1) {
+            pagoIdx = ci; break;
           }
+        }
+        var horaIdx = getColumnaHoraIdx(headers);
+        var maxFilas = Math.min(10, filasHoy.length);
+        fragmentos.push('Sesiones de hoy (mostrando ' + maxFilas + ' de ' + filasHoy.length + '):');
+        for (var j = 0; j < maxFilas; j++) {
+          var detalle = [];
+          if (clienteIdx >= 0) { var v = filasHoy[j][clienteIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Cliente=' + String(v).trim()); }
+          if (fisioIdx >= 0) { v = filasHoy[j][fisioIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Fisio=' + String(v).trim()); }
+          if (cantidadIdx >= 0) { v = filasHoy[j][cantidadIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Cant=' + String(v).trim()); }
+          if (pagoIdx >= 0) { v = filasHoy[j][pagoIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Pago=' + String(v).trim()); }
+          if (horaIdx >= 0) { v = filasHoy[j][horaIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Hora=' + String(v).trim()); }
+          if (detalle.length === 0) { for (var c = 0; c < headers.length && c < 6; c++) { var nomCol = headers[c]; var valor = filasHoy[j][c]; if (valor !== undefined && valor !== null && String(valor).trim() !== '') { detalle.push(nomCol + '=' + String(valor).trim()); } } }
           fragmentos.push((j + 1) + '.- ' + detalle.join(', '));
+        }
+        if (filasHoy.length > maxFilas) {
+          fragmentos.push('... y ' + (filasHoy.length - maxFilas) + ' más.');
         }
       }
     } catch (e) {
@@ -91,35 +103,8 @@ function responderBotWeb(token, pregunta) {
   var conocimientos = fragmentos.join('\n');
   var baseGroq = 'https://api.groq.com/openai/v1';
 
-  // 3.1) Pedir a GROQ la LISTA REAL de modelos activos para esta clave (no adivinar)
-  var modelos = ['groq/compound-mini'];
-  try {
-    var resModelos = UrlFetchApp.fetch(baseGroq + '/models', {
-      method: 'get',
-      headers: { 'Authorization': 'Bearer ' + apiKey },
-      muteHttpExceptions: true
-    });
-    var idsReal = JSON.parse(resModelos.getContentText()).data || [];
-    var disponibles = [];
-    for (var qi = 0; qi < idsReal.length; qi++) {
-      var idModelo = String(idsReal[qi].id || '');
-      var idL = idModelo.toLowerCase();
-      if (idL.indexOf('compound') !== -1 || idL.indexOf('llama') !== -1 || idL.indexOf('gemma') !== -1 || idL.indexOf('gpt-') !== -1) {
-        disponibles.push(idModelo);
-      }
-    }
-    // Orden: compound-mini primero (el que responde en tu otra web), luego el resto
-    var orden = [];
-    for (var di = 0; di < disponibles.length; di++) {
-      if (disponibles[di].toLowerCase().indexOf('compound-mini') !== -1) { orden.push(disponibles[di]); }
-    }
-    for (var d2 = 0; d2 < disponibles.length; d2++) {
-      if (orden.indexOf(disponibles[d2]) === -1) { orden.push(disponibles[d2]); }
-    }
-    if (orden.length > 0) { modelos = orden; }
-  } catch (e) {
-    Logger.log('no se pudo listar modelos GROQ: ' + e);
-  }
+  // Modelos a probar en orden (compound-mini primero, luego los mejores disponibles)
+  var modelos = ['groq/compound-mini', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
 
   var ultimoError = '';
 
