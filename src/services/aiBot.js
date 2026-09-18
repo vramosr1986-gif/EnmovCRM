@@ -51,6 +51,8 @@ Informacion de la web:
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
 
+  var ultimoError = '';
+
   for (var i = 0; i < modelos.length; i++) {
     payload.model = modelos[i];
 
@@ -67,7 +69,8 @@ Informacion de la web:
     const data = JSON.parse(response.getContentText());
 
     if (data.error) {
-      Logger.log('GROQ ' + modelos[i] + ' error: ' + (data.error.message || JSON.stringify(data.error)));
+      ultimoError = data.error.message || JSON.stringify(data.error);
+      Logger.log('GROQ ' + modelos[i] + ': ' + ultimoError);
       continue;
     }
 
@@ -78,5 +81,5 @@ Informacion de la web:
     return texto;
   }
 
-  return 'No se pudo conectar con GROQ: todos los modelos fallaron. Revisa la clave API.';
+  return 'No se pudo conectar con GROQ. Error de la API: ' + ultimoError;
 }
