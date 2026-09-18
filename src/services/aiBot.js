@@ -1,31 +1,25 @@
 function responderBotWeb(token, pregunta) {
-  // 1) Validar sesion igual que el resto de la app
-  const sesion = requireSession(token != '' ? token : '');
-  const esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
-  const nombreSesion = sesion.nombre || sesion.username || '';
+  // ================= 1) SESION Y ROL =================
+  var sesion = requireSession(token != '' ? token : '');
+  var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
+  var nombreSesion = sesion.nombre || sesion.username || '';
+  var rolSesion = esAdmin ? 'administrador' : 'fisioterapeuta';
 
-  // 2) Construir la informacion SOLO con los modulos que este usuario puede ver
-  const modulosPermitidos = Array.isArray(sesion.modules) ? sesion.modules : [];
+  // ================= 2) DATOS: SOLO los modulos que el usuario puede ver =================
+  var modulosPermitidos = Array.isArray(sesion.modules) ? sesion.modules : [];
   var fragmentos = [];
+  fragmentos.push('El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.');
 
-  fragmentos.push('El usuario actual es "' + nombreSesion + '" y su rol es ' + (esAdmin ? 'administrador' : 'fisio') + '.');
-
+  var nombreModulo = '';
   for (var i = 0; i < modulosPermitidos.length && i < 4; i++) {
     var modulo = modulosPermitidos[i];
-    var nombreModulo = '';
-
-    // Nombre legible del modulo
-    if (MODULOS.ENMOV === modulo) {
-      nombreModulo = 'En Movimiento Sano (Enmov)';
-    } else if (MODULOS.NAVTA === modulo) {
-      nombreModulo = 'Navta';
-    } else if (MODULOS.DOMICILIACIONES === modulo) {
-      nombreModulo = 'Domiciliaciones';
-    }
+    if (MODULOS.ENMOV === modulo) { nombreModulo = 'En Movimiento Sano (Enmov)'; }
+    else if (MODULOS.NAVTA === modulo) { nombreModulo = 'Navta'; }
+    else if (MODULOS.DOMICILIACIONES === modulo) { nombreModulo = 'Domiciliaciones'; }
 
     try {
       var grid = getGridDataByModulo(modulo);
-      var gridFiltrado = filtrarGridPorFisio(grid, sesion.fisioFiltro);
+      var gridFiltrado = esAdmin ? grid : filtrarGridPorFisio(grid, sesion.fisioFiltro || '');
 
       fragmentos.push('\nMODULO: ' + nombreModulo);
       fragmentos.push('Columnas: ' + (gridFiltrado.headers || []).join(' | '));
@@ -35,15 +29,14 @@ function responderBotWeb(token, pregunta) {
         fragmentos.push('No hay registros.');
       } else {
         fragmentos.push('Hay ' + filas.length + ' registros. Ultimos hasta 8:');
-
         var fin = Math.min(8, filas.length);
         for (var j = filas.length - fin; j < filas.length; j++) {
           var detalle = [];
-          for (var c = 0; c < gridFiltrado.headers.length && c < 12; c++) {
-            var nombreCol = gridFiltrado.headers[c];
+          for (var c = 0; c < (gridFiltrado.headers || []).length && c < 12; c++) {
+            var nomCol = gridFiltrado.headers[c];
             var valor = filas[j][c];
             if (valor !== undefined && valor !== null && String(valor).trim() !== '') {
-              detalle.push(nombreCol + '=' + String(valor).trim());
+              detalle.push(nomCol + '=' + String(valor).trim());
             }
           }
           fragmentos.push((j + 1) + '.- ' + detalle.join(', '));
@@ -54,67 +47,97 @@ function responderBotWeb(token, pregunta) {
     }
   }
 
-  // 3) Llamar a GROQ con la informacion real del usuario
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
-  if (!apiKey) {
-    return 'El asistente no esta configurado: falta la clave API.';
+  // ================= 3) GROQ =================
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
+  if (!apiKey) { return 'El asistente no esta configurado: falta la clave API.'; }
+
+  var conocimientos = fragmentos.join('\n');
+  var baseGroq = 'https://api.groq.com/openai/v1';
+
+  // 3.1) Pedir a GROQ la LISTA REAL de modelos activos para esta clave (no adivinar)
+  var modelos = ['groq/compound-mini'];
+  try {
+    var resModelos = UrlFetchApp.fetch(baseGroq + '/models', {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + apiKey },
+      muteHttpExceptions: true
+    });
+    var idsReal = JSON.parse(resModelos.getContentText()).data || [];
+    var disponibles = [];
+    for (var qi = 0; qi < idsReal.length; qi++) {
+      var idModelo = String(idsReal[qi].id || '');
+      var idL = idModelo.toLowerCase();
+      if (idL.indexOf('compound') !== -1 || idL.indexOf('llama') !== -1 || idL.indexOf('gemma') !== -1 || idL.indexOf('gpt-') !== -1) {
+        disponibles.push(idModelo);
+      }
+    }
+    // Orden: compound-mini primero (el que responde en tu otra web), luego el resto
+    var orden = [];
+    for (var di = 0; di < disponibles.length; di++) {
+      if (disponibles[di].toLowerCase().indexOf('compound-mini') !== -1) { orden.push(disponibles[di]); }
+    }
+    for (var d2 = 0; d2 < disponibles.length; d2++) {
+      if (orden.indexOf(disponibles[d2]) === -1) { orden.push(disponibles[d2]); }
+    }
+    if (orden.length > 0) { modelos = orden; }
+  } catch (e) {
+    Logger.log('no se pudo listar modelos GROQ: ' + e);
   }
 
-  const conocimientos = fragmentos.join('\n');
-
-  // Definir el modelo preguntando a GROQ que tiene ACTIVO (no adivinar)
-  const modelos = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
   var ultimoError = '';
-
-  function llamar(modeloAA) {
-    const payload = {
-      model: modeloAA,
+  function llamarGroq(modelo) {
+    var payload = {
+      model: modelo,
       messages: [
-        {
-          role: 'system',
-          content: 'Eres un asistente de la web EnmovCRM.\n' +
-                   'Responde SOLO segun la informacion que te doy.\n' +
-                   'Si no esta en la informacion, responde: "No aparece en la web".\n' +
-                   'Se breve y claro. Responde en espanol.\n\n' +
-                   'Informacion:\n' + conocimientos
-        },
-        {
-          role: 'user',
-          content: pregunta
-        }
+        { role: 'system', content: 'Eres el asistente de EnmovCRM. Responde SOLO con la informacion dada. Si el dato no aparece, responde "No aparece en la web". Se breve, claro y en espanol. Si te piden crear, editar o borrar, NO lo hagas: di que eso requiere confirmacion del administrador.\n\nInformacion:\n' + conocimientos },
+        { role: 'user', content: pregunta }
       ],
       temperature: 0.5,
       max_tokens: 300
     };
-
-    const url = 'https://api.groq.com/openai/v1/chat/completions';
-
-    const response = UrlFetchApp.fetch(url, {
+    var resp = UrlFetchApp.fetch(baseGroq + '/chat/completions', {
       method: 'post',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     });
-
-    const data = JSON.parse(response.getContentText());
-
-    return data;
+    return JSON.parse(resp.getContentText());
   }
 
   for (var m = 0; m < modelos.length; m++) {
-    const data = llamar(modelos[m]);
-    if (data.error) {
-      ultimoError = data.error.message || JSON.stringify(data.error);
-      Logger.log('GROQ ' + modelos[m] + ': ' + ultimoError);
-      continue;
+    try {
+      var data = llamarGroq(modelos[m]);
+      if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+        return data.choices[0].message.content;
+      }
+      ultimoError = data.error ? (data.error.message || JSON.stringify(data.error)) : 'respuesta vacia';
+    } catch (e2) {
+      ultimoError = String(e2);
     }
-    return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-      ? data.choices[0].message.content
-      : 'No pude generar una respuesta.';
+    Logger.log('GROQ ' + modelos[m] + ': ' + ultimoError);
   }
 
-  return 'No se pudo conectar con GROQ. Error de la API: ' + ultimoError;
+  return 'No se pudo conectar con GROQ. Error de la API: ' + ultimoError + ' Modelos probados: ' + modelos.join(', ');
+}
+
+function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
+  var sesion = requireSession(token != '' ? token : '');
+  var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
+  if (!esAdmin) {
+    return 'Solo el administrador puede ejecutar acciones.';
+  }
+  var permiso = sesion.modules || [];
+  if (permiso.indexOf(modulo) === -1) {
+    return 'No tienes acceso a este modulo.';
+  }
+
+  var accionL = String(accion || '').toLowerCase();
+  if (accionL === 'crear') {
+    return crearRegistro(token, modulo, datosFila);
+  } else if (accionL === 'editar') {
+    return actualizarRegistro(token, modulo, indiceFila, datosFila);
+  } else if (accionL === 'eliminar') {
+    return eliminarRegistro(token, modulo, indiceFila);
+  }
+  return 'Accion no reconocida: ' + accion;
 }
