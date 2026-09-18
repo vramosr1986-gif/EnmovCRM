@@ -200,6 +200,18 @@
     return isNaN(d.getTime()) ? null : d;
   }
 
+  function parseTime(value) {
+    if (!value) return null;
+    var s = String(value).trim();
+    var m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!m) return null;
+    var h = Number(m[1]);
+    var min = Number(m[2]);
+    var sec = m[3] ? Number(m[3]) : 0;
+    if (h < 0 || h > 23 || min < 0 || min > 59 || sec < 0 || sec > 59) return null;
+    return h * 3600 + min * 60 + sec;
+  }
+
   function pad2(n) {
     return String(n).padStart(2, '0');
   }
@@ -1308,6 +1320,9 @@ var COMBO_PRESETS = [
       var av = a.data[sortColumnIndex];
       var bv = b.data[sortColumnIndex];
 
+      var header = currentHeaders[sortColumnIndex] || '';
+      var isTimeCol = isTimeField(header);
+
       var an = isNumericText(av) ? parseNumber(av) : null;
       var bn = isNumericText(bv) ? parseNumber(bv) : null;
       if (an != null && bn != null) {
@@ -1322,6 +1337,16 @@ var COMBO_PRESETS = [
         if (ad.getTime() < bd.getTime()) return -1 * dir;
         if (ad.getTime() > bd.getTime()) return 1 * dir;
         return 0;
+      }
+
+      if (isTimeCol) {
+        var at = parseTime(av);
+        var bt = parseTime(bv);
+        if (at != null && bt != null) {
+          if (at < bt) return -1 * dir;
+          if (at > bt) return 1 * dir;
+          return 0;
+        }
       }
 
       var as = normalize(av);

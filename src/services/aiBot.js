@@ -35,7 +35,7 @@ function responderBotWeb(token, pregunta) {
 
       var fechaIdx = getColumnaFechaIdx(headers);
       var clienteIdx = getColumnaClienteIdx(headers);
-      var hoy = fechaActual();
+      var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
 
       var sesionesHoy = 0;
       var clientesHoy = [];
