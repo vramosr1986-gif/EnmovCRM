@@ -394,7 +394,7 @@ var COMBO_PRESETS = [
 
   function isHiddenFormField(header) {
     var key = getHeaderKey(header);
-    return /^quien_cobra$/.test(key) || /^sesion_o_solopago$/.test(key);
+    return /^quien_cobra$/.test(key) || /^sesion_o_solopago$/.test(key) || /^marca_temporal$/.test(key);
   }
 
   function firstVisibleColIndex() {
@@ -455,6 +455,17 @@ var COMBO_PRESETS = [
       }
     }
     return true;
+  }
+
+  function validarOperacionTarjeta(values) {
+    if (paymentColIdx < 0 || operationColIdx < 0) return null;
+    var pago = normalize(String(values[paymentColIdx] == null ? '' : values[paymentColIdx]));
+    if (pago !== 'tarjeta') return null;
+    var op = String(values[operationColIdx] == null ? '' : values[operationColIdx]).trim();
+    if (!op || op === '0') {
+      return 'Si el pago es Tarjeta, el numero de operacion no puede ser 0.';
+    }
+    return null;
   }
 
   function refreshSesionSoloPagoOptions() {
@@ -1354,6 +1365,15 @@ var COMBO_PRESETS = [
       cleanValue = (value === toTimeInputValue(wrapper.data[state.colIndex])) ? wrapper.data[state.colIndex] : fromTimeInputValue(value);
     }
     values[state.colIndex] = cleanValue;
+
+    var opError = validarOperacionTarjeta(values);
+    if (opError) {
+      showError(opError);
+      state.cell.textContent = state.oldValue;
+      clearInlineEditState();
+      return;
+    }
+
     var payload = buildSourceRowValuesFromVisible(state.rowIndex, values);
 
     google.script.run
@@ -1493,6 +1513,12 @@ var COMBO_PRESETS = [
 
     var values = collectModalValues();
 
+    var opError = validarOperacionTarjeta(values);
+    if (opError) {
+      showError(opError);
+      return;
+    }
+
     var dup = findDuplicateRow(values, editingRowIndex);
     if (dup) {
       showError('No se puede guardar: este registro ya existe en la fila ' + (dup.sourceIndex + 2) + '. Coincide fecha, hora, fisio y el resto de campos.');
@@ -1518,6 +1544,12 @@ var COMBO_PRESETS = [
     }
 
     var values = collectModalValues();
+
+    var opError = validarOperacionTarjeta(values);
+    if (opError) {
+      showError(opError);
+      return;
+    }
 
     var dup = findDuplicateRow(values, -1);
     if (dup) {
