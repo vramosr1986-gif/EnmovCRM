@@ -1,6 +1,6 @@
 function responderBotWeb(token, pregunta) {
   // 1) Validar sesion igual que el resto de la app
-  const sesion = requireSession(token!='' ? token : '');
+  const sesion = requireSession(token != '' ? token : '');
 
   // Que el asistente sepa quien es y que puede ver
   const esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
@@ -41,7 +41,7 @@ function responderBotWeb(token, pregunta) {
         var fin = Math.min(8, filas.length);
         for (var j = filas.length - fin; j < filas.length; j++) {
           var detalle = [];
-          for (var c = 0; c < gridFiltrado.headers.length && c < 12; c++) {
+          for (var c = 0; c < gridFiltrado.headers.length && c < 14; c++) {
             var nombreCol = gridFiltrado.headers[c];
             var valor = filas[j][c];
             if (valor !== undefined && valor !== null && String(valor).trim() !== '') {
@@ -56,13 +56,11 @@ function responderBotWeb(token, pregunta) {
     }
   }
 
-  // 3) Llamar a GROQ con la informacion real del usuario
+  // 3) GROQ usa SOLO la informacion que el rol le permite
   const apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!apiKey) {
-    return 'El asistente no esta configurado: falta la clave API.';
+    return 'El asistente no esta configurado. Falta la clave API.';
   }
-
-  const conocimientos = fragmentos.join('\n');
 
   const payload = {
     model: 'llama-3.1-8b-instant',
@@ -71,19 +69,18 @@ function responderBotWeb(token, pregunta) {
         role: 'system',
         content: 'Eres el asistente de la web EnmovCRM.\n' +
                  'Responde SOLO segun la informacion que te doy.\n' +
-                 'Esos datos vienen de la hoja real de la app.\n' +
-                 'Si el usuario NO es administrador, JAMAS menciones modulos o datos que no esten en la informacion.\n' +
-                 'Si no esta en la informacion, responde exactamente: "No aparece en la web".\n' +
+                 (esAdmin ? '' : 'El usuario NO es administrador. JAMAS menciones modulos o registros que no esten en la informacion.\n') +
+                 'Si no esta en la informacion, responde: "No aparece en la web".\n' +
                  'Se breve y claro. Responde en espanol.\n\n' +
-                 'Datos:\n' + conocimientos
+                 'Informacion:\n' + fragmentos.join('\n')
       },
       {
         role: 'user',
         content: pregunta
       }
     ],
-    temperature: 0.4,
-    max_tokens: 400
+    temperature: 0.5,
+    max_tokens: 500
   };
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
@@ -108,4 +105,41 @@ function responderBotWeb(token, pregunta) {
   return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
     ? data.choices[0].message.content
     : 'No pude generar una respuesta.';
+}
+
+// ------------------------------------------------------------------
+// ACCIONES (crear / editar / eliminar) - SOLO ADMINISTRADOR
+// El usuario debe CONFIRMAR la accion ANTES de ejecutarse.
+// Reutiliza las funciones reales de la app (auth + auditoria incluidas).
+// ------------------------------------------------------------------
+
+function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
+  const sesion = requireSession(token != '' ? token : '');
+
+  if (String(sesion.rol || '').toLowerCase() !== 'admin') {
+    return {
+      ok: false,
+      mensaje: 'Solo los administradores pueden crear, editar o eliminar registros con el asistente.'
+    };
+  }
+
+  if (!MODULOS || MODULOS[modulo] === undefined) {
+    return { ok: false, mensaje: 'Modulo no valido.' };
+  }
+
+  try {
+    var resultado;
+    if (accion === 'crear') {
+      resultado = crearRegistro(token, modulo, datosFila);
+    } else if (accion === 'editar') {
+      resultado = actualizarRegistro(token, modulo, indiceFila, datosFila);
+    } else if (accion === 'eliminar') {
+      resultado = eliminarRegistro(token, modulo, indiceFila);
+    } else {
+      return { ok: false, mensaje: 'Accion no reconocida.' };
+    }
+    return { ok: true, resultado: resultado, accion: accion };
+  } catch (e) {
+    return { ok: false, mensaje: 'No se pudo completar la accion: ' + e };
+  }
 }
