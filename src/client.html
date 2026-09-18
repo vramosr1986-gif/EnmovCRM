@@ -2823,7 +2823,6 @@ var COMBO_PRESETS = [
     currentUserNameEl.textContent = currentUserNombre;
     loginOverlayEl.hidden = true;
     appContentEl.hidden = false;
-  limpiarChatSesionOffline();
     manageUsersBtn.hidden = role !== 'admin';
     mergePdfsBtn.hidden = role !== 'admin';
 
@@ -2973,7 +2972,6 @@ var COMBO_PRESETS = [
   }
 
   logoutBtn.addEventListener('click', function() {
-    limpiarChatSesionOffline();
     google.script.run.logout(currentToken);
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -2999,72 +2997,6 @@ var COMBO_PRESETS = [
   mergePdfsBtn.addEventListener('click', function() {
     openPdfToolsModal();
   });
-
-  // --- Chat ---
-  var chatToggleEl = document.getElementById('chat-toggle');
-  var chatPanelEl = document.getElementById('chat-panel');
-  var chatMessagesEl = document.getElementById('chat-messages');
-
-function limpiarChatSesionOffline() {
-  try {
-    if (chatMessagesEl) { chatMessagesEl.innerHTML = ''; }
-  } catch (e) {}
-}
-  var chatInputEl = document.getElementById('chat-input');
-  var chatFormEl = document.getElementById('chat-form');
-  var chatSendEl = document.getElementById('chat-send');
-  var chatCloseEl = document.getElementById('chat-close');
-
-  chatToggleEl.addEventListener('click', function() {
-    chatPanelEl.hidden = !chatPanelEl.hidden;
-    if (!chatPanelEl.hidden) {
-      chatInputEl.focus();
-    }
-  });
-
-  chatCloseEl.addEventListener('click', function() {
-    chatPanelEl.hidden = true;
-  });
-
-  chatFormEl.addEventListener('submit', function() {
-    sendChatMessage();
-    return false;
-  });
-
-  chatSendEl.addEventListener('click', function() {
-    sendChatMessage();
-  });
-
-  chatInputEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
-
-  function sendChatMessage() {
-    var text = chatInputEl.value.trim();
-    if (!text || !currentToken) return;
-
-    chatMessagesEl.innerHTML += '<div class="chat-msg user">' + escapeHtml(text) + '</div>';
-    chatInputEl.value = '';
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-
-    chatSendEl.disabled = true;
-
-    google.script.run
-      .withSuccessHandler(function(respuesta) {
-        chatSendEl.disabled = false;
-        chatMessagesEl.innerHTML += '<div class="chat-msg bot">' + escapeHtml(respuesta) + '</div>';
-        chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-      })
-      .withFailureHandler(function() {
-        chatSendEl.disabled = false;
-        chatMessagesEl.innerHTML += '<div class="chat-msg bot error">No se pudo conectar con el asistente.</div>';
-        chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-      })
-      .responderBotWeb(currentToken, text);
-  }
 
   tryAutoLogin();
 })();
