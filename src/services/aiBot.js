@@ -47,7 +47,7 @@ Informacion de la web:
 
   if (data.error) {
     Logger.log('Gemini error: ' + JSON.stringify(data.error));
-    return 'Error al conectar con el asistente.';
+    return 'Error de API: ' + (data.error.message || JSON.stringify(data.error));
   }
 
   return data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
