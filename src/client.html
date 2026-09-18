@@ -222,6 +222,86 @@
     return null;
   }
 
+  var COMBO_PRESETS = [
+    { label: 'Pilates · Sesion · Efectivo', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo' } },
+    { label: 'Pilates · Sesion · Tarjeta', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
+    { label: 'Pilates · Bono · Bono', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Bono' } },
+    { label: 'Fisio · Sesion · Efectivo', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Efectivo' } },
+    { label: 'Fisio · Sesion · Tarjeta', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
+    { label: 'Fisio · Bono · Bono', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Bono' } },
+    { label: 'Solo pago · Sesion · Efectivo', values: { sesion_o_solopago: 'Pago', que_paga: 'Sesion', como_paga: 'Efectivo' } }
+  ];
+
+  function getPresetFieldIndex(fieldKey) {
+    switch (fieldKey) {
+      case 'fisio_de_sesion':
+        return getHeaderIndexByPattern(/^(fisio_de_sesion|fisio)\*?$/);
+      case 'quien_cobra':
+        return getHeaderIndexByPattern(/^quien_cobra\*?$/);
+      case 'que_paga':
+        return getHeaderIndexByPattern(/^que_paga\*?$/);
+      case 'como_paga':
+        return getHeaderIndexByPattern(/^como_paga\*?$/);
+      case 'sesion_o_solopago':
+        return getHeaderIndexByPattern(/^sesion_o_solopago\*?$/);
+      case 'cantidad':
+        return getHeaderIndexByPattern(/^(cantidad|importe|total)\*?$/);
+    }
+    return -1;
+  }
+
+  function getAvailableComboPresets() {
+    return COMBO_PRESETS.filter(function(preset) {
+      return Object.keys(preset.values).some(function(fieldKey) {
+        return getPresetFieldIndex(fieldKey) >= 0;
+      });
+    });
+  }
+
+  function renderComboPresets() {
+    var available = getAvailableComboPresets();
+    if (!available.length) {
+      return '';
+    }
+    var html = '<div class="combo-presets">';
+    html += '<span class="combo-presets-title">Combinaciones frecuentes (rellenan los campos de un toque):</span>';
+    available.forEach(function(preset, index) {
+      html += '<button type="button" class="btn tiny combo-preset-btn" data-combo-preset="' + index + '" title="Rellena el formulario con: ' + escapeHtml(preset.label) + '">' + escapeHtml(preset.label) + '</button>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function applyComboPreset(presetIndex) {
+    var preset = getAvailableComboPresets()[presetIndex];
+    if (!preset) {
+      return;
+    }
+    Object.keys(preset.values).forEach(function(fieldKey) {
+      var col = getPresetFieldIndex(fieldKey);
+      if (col < 0) {
+        return;
+      }
+      var input = modalBodyEl.querySelector('[data-edit-col="' + col + '"]');
+      if (!input) {
+        return;
+      }
+      var value = preset.values[fieldKey];
+      if (input.tagName === 'SELECT') {
+        var options = (getFieldOptions(currentHeaders[col] || '', []) || []).slice();
+        if (options.indexOf(value) === -1) {
+          options.push(value);
+        }
+        input.innerHTML = options.map(function(opt) {
+          var selected = opt === value ? ' selected' : '';
+          return '<option value="' + escapeHtml(opt) + '"' + selected + '>' + escapeHtml(opt) + '</option>';
+        }).join('');
+      } else {
+        input.value = value;
+      }
+    });
+  }
+
   function isCantidadField(header) {
     var key = getHeaderKey(header);
     return /^cantidad$|^cantidad\*$/.test(key);
@@ -1384,7 +1464,7 @@
     var defaults = currentHeaders.map(function(header) {
       return getDefaultValueForHeader(header);
     });
-    modalBodyEl.innerHTML = renderRecordForm(defaults);
+    modalBodyEl.innerHTML = renderComboPresets() + renderRecordForm(defaults);
     refreshSesionSoloPagoOptions();
     modalSaveEl.textContent = 'Crear';
     var firstInput = modalBodyEl.querySelector('input, select');
@@ -2168,6 +2248,12 @@
   modalCancelEl.addEventListener('click', closeModal);
 
   modalBodyEl.addEventListener('click', function(event) {
+    var comboBtn = event.target.closest('[data-combo-preset]');
+    if (comboBtn && modalMode === 'create') {
+      applyComboPreset(Number(comboBtn.getAttribute('data-combo-preset')));
+      return;
+    }
+
     var changePassBtn = event.target.closest('[data-change-password]');
     if (changePassBtn && modalMode === 'manage-users') {
       var targetUser = changePassBtn.getAttribute('data-change-password');
