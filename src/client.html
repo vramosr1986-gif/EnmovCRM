@@ -223,13 +223,15 @@
   }
 
   var COMBO_PRESETS = [
-    { label: 'Pilates · Sesion · Efectivo', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo' } },
-    { label: 'Pilates · Sesion · Tarjeta', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
-    { label: 'Pilates · Bono · Bono', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Bono' } },
-    { label: 'Fisio · Sesion · Efectivo', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Efectivo' } },
-    { label: 'Fisio · Sesion · Tarjeta', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
-    { label: 'Fisio · Bono · Bono', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Bono' } },
-    { label: 'Solo pago · Sesion · Efectivo', values: { sesion_o_solopago: 'Pago', que_paga: 'Sesion', como_paga: 'Efectivo' } }
+    { label: 'Pilates · Sesion · Efectivo · 10€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '10' } },
+    { label: 'Pilates · Sesion · Tarjeta · 10€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '10' } },
+    { label: 'Pilates · Bono · Efectivo · 80€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '80' } },
+    { label: 'Pilates · Bono · Tarjeta · 80€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '80' } },
+    { label: 'Fisio · Sesion · Efectivo · 30€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '30' } },
+    { label: 'Fisio · Sesion · Tarjeta · 30€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '30' } },
+    { label: 'Fisio · Bono · Efectivo · 150€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '150' } },
+    { label: 'Fisio · Bono · Tarjeta · 150€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '150' } },
+    { label: 'Solo pago · Sesion · Efectivo · 20€', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '20' } }
   ];
 
   function getPresetFieldIndex(fieldKey) {
@@ -266,7 +268,8 @@
     var html = '<div class="combo-presets">';
     html += '<span class="combo-presets-title">Combinaciones frecuentes (rellenan los campos de un toque):</span>';
     available.forEach(function(preset, index) {
-      html += '<button type="button" class="btn tiny combo-preset-btn" data-combo-preset="' + index + '" title="Rellena el formulario con: ' + escapeHtml(preset.label) + '">' + escapeHtml(preset.label) + '</button>';
+      var colorClass = preset.cat ? ' combo-' + escapeHtml(preset.cat) : '';
+      html += '<button type="button" class="btn tiny combo-preset-btn' + colorClass + '" data-combo-preset="' + index + '" title="Rellena el formulario con: ' + escapeHtml(preset.label) + '">' + escapeHtml(preset.label) + '</button>';
     });
     html += '</div>';
     return html;
