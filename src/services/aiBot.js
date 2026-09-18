@@ -1,8 +1,6 @@
 function responderBotWeb(token, pregunta) {
   // 1) Validar sesion igual que el resto de la app
   const sesion = requireSession(token != '' ? token : '');
-
-  // Que el asistente sepa quien es y que puede ver
   const esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
   const nombreSesion = sesion.nombre || sesion.username || '';
 
@@ -41,7 +39,7 @@ function responderBotWeb(token, pregunta) {
         var fin = Math.min(8, filas.length);
         for (var j = filas.length - fin; j < filas.length; j++) {
           var detalle = [];
-          for (var c = 0; c < gridFiltrado.headers.length && c < 14; c++) {
+          for (var c = 0; c < gridFiltrado.headers.length && c < 12; c++) {
             var nombreCol = gridFiltrado.headers[c];
             var valor = filas[j][c];
             if (valor !== undefined && valor !== null && String(valor).trim() !== '') {
@@ -56,90 +54,67 @@ function responderBotWeb(token, pregunta) {
     }
   }
 
-  // 3) GROQ usa SOLO la informacion que el rol le permite
+  // 3) Llamar a GROQ con la informacion real del usuario
   const apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!apiKey) {
-    return 'El asistente no esta configurado. Falta la clave API.';
+    return 'El asistente no esta configurado: falta la clave API.';
   }
 
-  const payload = {
-    model: 'llama-3.1-8b-instant',
-    messages: [
-      {
-        role: 'system',
-        content: 'Eres el asistente de la web EnmovCRM.\n' +
-                 'Responde SOLO segun la informacion que te doy.\n' +
-                 (esAdmin ? '' : 'El usuario NO es administrador. JAMAS menciones modulos o registros que no esten en la informacion.\n') +
-                 'Si no esta en la informacion, responde: "No aparece en la web".\n' +
-                 'Se breve y claro. Responde en espanol.\n\n' +
-                 'Informacion:\n' + fragmentos.join('\n')
-      },
-      {
-        role: 'user',
-        content: pregunta
-      }
-    ],
-    temperature: 0.5,
-    max_tokens: 500
-  };
+  const conocimientos = fragmentos.join('\n');
 
-  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  // Definir el modelo preguntando a GROQ que tiene ACTIVO (no adivinar)
+  const modelos = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
+  var ultimoError = '';
 
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    headers: {
-      'Authorization': 'Bearer ' + apiKey,
-      'Content-Type': 'application/json'
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
-
-  const data = JSON.parse(response.getContentText());
-
-  if (data.error) {
-    Logger.log('GROQ error: ' + JSON.stringify(data.error));
-    return 'Error de API: ' + (data.error.message || JSON.stringify(data.error));
-  }
-
-  return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-    ? data.choices[0].message.content
-    : 'No pude generar una respuesta.';
-}
-
-// ------------------------------------------------------------------
-// ACCIONES (crear / editar / eliminar) - SOLO ADMINISTRADOR
-// El usuario debe CONFIRMAR la accion ANTES de ejecutarse.
-// Reutiliza las funciones reales de la app (auth + auditoria incluidas).
-// ------------------------------------------------------------------
-
-function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
-  const sesion = requireSession(token != '' ? token : '');
-
-  if (String(sesion.rol || '').toLowerCase() !== 'admin') {
-    return {
-      ok: false,
-      mensaje: 'Solo los administradores pueden crear, editar o eliminar registros con el asistente.'
+  function llamar(modeloAA) {
+    const payload = {
+      model: modeloAA,
+      messages: [
+        {
+          role: 'system',
+          content: 'Eres un asistente de la web EnmovCRM.\n' +
+                   'Responde SOLO segun la informacion que te doy.\n' +
+                   'Si no esta en la informacion, responde: "No aparece en la web".\n' +
+                   'Se breve y claro. Responde en espanol.\n\n' +
+                   'Informacion:\n' + conocimientos
+        },
+        {
+          role: 'user',
+          content: pregunta
+        }
+      ],
+      temperature: 0.5,
+      max_tokens: 300
     };
+
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    const data = JSON.parse(response.getContentText());
+
+    return data;
   }
 
-  if (!MODULOS || MODULOS[modulo] === undefined) {
-    return { ok: false, mensaje: 'Modulo no valido.' };
-  }
-
-  try {
-    var resultado;
-    if (accion === 'crear') {
-      resultado = crearRegistro(token, modulo, datosFila);
-    } else if (accion === 'editar') {
-      resultado = actualizarRegistro(token, modulo, indiceFila, datosFila);
-    } else if (accion === 'eliminar') {
-      resultado = eliminarRegistro(token, modulo, indiceFila);
-    } else {
-      return { ok: false, mensaje: 'Accion no reconocida.' };
+  for (var m = 0; m < modelos.length; m++) {
+    const data = llamar(modelos[m]);
+    if (data.error) {
+      ultimoError = data.error.message || JSON.stringify(data.error);
+      Logger.log('GROQ ' + modelos[m] + ': ' + ultimoError);
+      continue;
     }
-    return { ok: true, resultado: resultado, accion: accion };
-  } catch (e) {
-    return { ok: false, mensaje: 'No se pudo completar la accion: ' + e };
+    return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+      ? data.choices[0].message.content
+      : 'No pude generar una respuesta.';
   }
+
+  return 'No se pudo conectar con GROQ. Error de la API: ' + ultimoError;
 }
