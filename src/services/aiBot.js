@@ -34,7 +34,7 @@ Informacion de la web:
     }]
   };
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + apiKey;
 
   const response = UrlFetchApp.fetch(url, {
     method: 'post',
