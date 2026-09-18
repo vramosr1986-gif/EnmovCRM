@@ -73,18 +73,41 @@ function eliminarRegistro(token, modulo, indiceFila) {
   const sesion = requireAuthorizedSession(token, modulo);
   verificarPropiedadFilaFisio(modulo, indiceFila, sesion.fisioFiltro);
 
-  const row = Number(indiceFila);
+  const resultado = eliminarFilaModuloConDatos(modulo, indiceFila);
+
+  registrarAccionAuditoria(sesion, modulo, 'ELIMINAR', resultado.filaReal, 'Registro eliminado', resultado.antes, null);
+  return true;
+}
+
+function eliminarRegistrosDuplicados(token, modulo, indicesFila) {
+  const sesion = requireAuthorizedSession(token, modulo);
+  if (!Array.isArray(indicesFila) || indicesFila.length === 0) {
+    throw new Error('No hay registros duplicados que eliminar.');
+  }
+
   const grid = getGridDataByModulo(modulo);
-  const headers = grid.headers;
-  const antes = {};
-  headers.forEach(function(cabecera, i) {
-    antes[cabecera] = grid.rows[row][i] == null ? '' : grid.rows[row][i];
+  if (sesion.fisioFiltro) {
+    const colIdx = getColumnaFisioIdx(grid.headers);
+    const objetivo = normalizarTexto(sesion.fisioFiltro);
+    indicesFila.forEach(function(indiceFila) {
+      const row = Number(indiceFila);
+      if (!Number.isInteger(row) || row < 0 || row >= grid.rows.length) {
+        throw new Error('Indice de fila no valido.');
+      }
+      const valor = colIdx >= 0 ? normalizarTexto(grid.rows[row][colIdx]) : '';
+      if (valor !== objetivo) {
+        throw new Error('No tienes permiso sobre uno de los registros.');
+      }
+    });
+  }
+
+  const eliminadas = eliminarFilasModulo(modulo, indicesFila);
+
+  eliminadas.forEach(function(f) {
+    registrarAccionAuditoria(sesion, modulo, 'ELIMINAR', f.filaReal, 'Registro eliminado (grupo duplicado)', f.antes, null);
   });
 
-  eliminarFilaModulo(modulo, indiceFila);
-
-  registrarAccionAuditoria(sesion, modulo, 'ELIMINAR', row + 2, 'Registro eliminado', antes, null);
-  return true;
+  return eliminadas;
 }
 
 function abrirFormularioFactura(token, modulo, indiceFila) {

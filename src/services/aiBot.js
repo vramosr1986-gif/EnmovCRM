@@ -9,6 +9,13 @@ function responderBotWeb(token, pregunta) {
   var modulosPermitidos = Array.isArray(sesion.modules) ? sesion.modules : [];
   var fragmentos = [];
   fragmentos.push('El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.');
+  fragmentos.push('\nCATALOGO DE PRECIOS:');
+  fragmentos.push('Sesion de Fisio = 45€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
+  fragmentos.push('Sesion de Fisio Respi = 50€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
+  fragmentos.push('Sesion de Pilates = 25€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
+  fragmentos.push('Bono de Fisio = 200€ (compra unica con Tarjeta o Efectivo).');
+  fragmentos.push('Bono de Fisio Respi = 240€ (compra unica con Tarjeta o Efectivo).');
+  fragmentos.push('Bono de Pilates = 75€ (compra unica con Tarjeta o Efectivo).');
 
   var nombreModulo = '';
   for (var i = 0; i < modulosPermitidos.length && i < 4; i++) {

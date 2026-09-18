@@ -370,6 +370,24 @@ function crearFilaModulo(modulo, datosFila) {
   });
 }
 
+function obtenerHeadersDeValores(valores) {
+  return (valores && valores[0]) ? valores[0].map(function(h, i) {
+    const key = String(h || '').trim();
+    return key || ('Columna ' + (i + 1));
+  }) : [];
+}
+
+function filaRealADatos(hoja, filaReal) {
+  const rango = hoja.getRange(filaReal, 1, 1, hoja.getLastColumn());
+  const valores = rango.getValues()[0];
+  const headers = obtenerHeadersDeValores(hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues());
+  const datos = {};
+  headers.forEach(function(cabecera, i) {
+    datos[cabecera] = valores[i] == null ? '' : valores[i];
+  });
+  return datos;
+}
+
 function eliminarFilaModulo(modulo, indiceFila) {
   const row = Number(indiceFila);
   const filaReal = row + 2;
@@ -385,6 +403,64 @@ function eliminarFilaModulo(modulo, indiceFila) {
 
     hoja.deleteRow(filaReal);
     return true;
+  });
+}
+
+function eliminarFilaModuloConDatos(modulo, indiceFila) {
+  const row = Number(indiceFila);
+  const filaReal = row + 2;
+  if (!Number.isInteger(row) || filaReal < 2) {
+    throw new Error('Indice de fila no valido.');
+  }
+
+  return conBloqueoEscritura(function() {
+    const hoja = getHojaDatosPrincipal(modulo);
+    const ultimaFila = hoja.getLastRow();
+    if (filaReal > ultimaFila) {
+      throw new Error('La fila indicada no existe.');
+    }
+
+    const antes = filaRealADatos(hoja, filaReal);
+    hoja.deleteRow(filaReal);
+    return { filaReal: filaReal, antes: antes };
+  });
+}
+
+function eliminarFilasModulo(modulo, indicesFila) {
+  if (!Array.isArray(indicesFila) || indicesFila.length === 0) {
+    throw new Error('No hay filas que eliminar.');
+  }
+
+  const nums = indicesFila.map(Number).filter(function(n) {
+    return Number.isInteger(n) && n >= 0;
+  });
+
+  if (!nums.length) {
+    throw new Error('Indices de fila no validos.');
+  }
+
+  return conBloqueoEscritura(function() {
+    const hoja = getHojaDatosPrincipal(modulo);
+    const ultimaFila = hoja.getLastRow();
+    const filasReales = nums
+      .map(function(row) { return row + 2; })
+      .filter(function(f) { return f >= 2 && f <= ultimaFila; });
+
+    const unicas = filasReales.filter(function(v, i, arr) { return arr.indexOf(v) === i; });
+    if (!unicas.length) {
+      throw new Error('Ninguna fila indicada existe.');
+    }
+
+    const eliminadas = unicas.map(function(fr) {
+      return { filaReal: fr, antes: filaRealADatos(hoja, fr) };
+    });
+
+    unicas.sort(function(a, b) { return b - a; });
+    unicas.forEach(function(fr) {
+      hoja.deleteRow(fr);
+    });
+
+    return eliminadas;
   });
 }
 

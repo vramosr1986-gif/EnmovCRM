@@ -75,3 +75,29 @@ function getModuloAppConfig(modulo) {
   }
   return app;
 }
+
+function diagnosticoConfiguracionHojas() {
+  const resultado = Object.keys(SHEETS || {}).map(function(modulo) {
+    const cfg = SHEETS[modulo] || {};
+    const entrada = {
+      modulo: modulo,
+      spreadsheetId: cfg.spreadsheetId || '',
+      sheetGid: cfg.sheetGid != null ? cfg.sheetGid : '',
+      sheetName: cfg.sheetName || ''
+    };
+    try {
+      const ss = getSpreadsheetByModulo(modulo);
+      const hoja = getHojaDatosPrincipal(modulo);
+      entrada.archivo = ss.getName();
+      entrada.hojaResuelta = hoja.getName();
+      entrada.sheetIdReal = hoja.getSheetId();
+      entrada.ultimaFila = hoja.getLastRow();
+      entrada.primerosHeaders = hoja.getRange(1, 1, 1, Math.min(hoja.getLastColumn(), 10)).getValues()[0].join(' | ');
+    } catch (e) {
+      entrada.error = e.message;
+    }
+    return entrada;
+  });
+  Logger.log(JSON.stringify(resultado, null, 2));
+  return resultado;
+}
