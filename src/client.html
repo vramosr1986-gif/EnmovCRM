@@ -79,6 +79,11 @@
   function showError(text) {
     errorBoxEl.textContent = text;
     errorBoxEl.hidden = false;
+    if (modalBodyEl && !modalBodyEl.hidden && modalOverlayEl && modalOverlayEl.classList && modalOverlayEl.classList.contains('modal-open')) {
+      errorBoxEl.classList.add('error-box-toast');
+    } else {
+      errorBoxEl.classList.remove('error-box-toast');
+    }
   }
 
   function clearError() {
@@ -210,7 +215,7 @@
     }
 
     if (/^que_paga$|^que_paga\*$/.test(key)) {
-      return ['Sesion', 'Bono', 'Pilates'];
+      return ['Sesion', 'Pilates', 'Fisio', 'Fisio Resp', 'Bono', 'Bono Fisio', 'Bono Fisio Resp', 'Bono Pilates'];
     }
 
     if (/^como_paga$|^como_paga\*$/.test(key)) {
@@ -218,25 +223,28 @@
     }
 
     if (/^sesion_o_solopago$|^sesion_o_solopago\*$/.test(key)) {
-      return ['Pilates', 'Fisio', 'Pago'];
+      return ['Sesion', 'Pago'];
     }
 
     return null;
   }
 
 var COMBO_PRESETS = [
-    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', grupo: 'Fisio Resp', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '50' } },
-    { label: 'Fisio Resp · Bono · Tarjeta · 240€', grupo: 'Fisio Resp', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '240' } },
-    { label: 'Fisio · Sesion · Bono', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Bono' } },
-    { label: 'Fisio · Sesion · Tarjeta · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '45' } },
-    { label: 'Fisio · Bono · Tarjeta · 200€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
-    { label: 'Fisio · Bono · Efectivo · 200€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
-    { label: 'Pago · Bono · Tarjeta · 200€', grupo: 'Fisio', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
-    { label: 'Pago · Bono · Efectivo · 200€', grupo: 'Fisio', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
-    { label: 'Pilates · Bono · Tarjeta · 75€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '75' } },
-    { label: 'Pilates · Bono · Efectivo · 75€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '75' } },
-    { label: 'Pilates · Sesion · Tarjeta · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '25' } },
-    { label: 'Pilates · Sesion · Efectivo · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '25' } }
+    { label: 'Fisio · Sesion · Tarjeta · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '45' } },
+    { label: 'Fisio · Sesion · Efectivo · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '45' } },
+    { label: 'Fisio · Sesion · Bono', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono' } },
+    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '50' } },
+    { label: 'Fisio Resp · Sesion · Efectivo · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '50' } },
+    { label: 'Fisio Resp · Sesion · Bono', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono' } },
+    { label: 'Pilates · Sesion · Tarjeta · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '25' } },
+    { label: 'Pilates · Sesion · Efectivo · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '25' } },
+    { label: 'Pilates · Sesion · Bono', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono' } },
+    { label: 'Bono Fisio · Tarjeta · 200€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio', como_paga: 'Tarjeta', cantidad: '200' } },
+    { label: 'Bono Fisio · Efectivo · 200€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio', como_paga: 'Efectivo', cantidad: '200' } },
+    { label: 'Bono Fisio Resp · Tarjeta · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio Resp', como_paga: 'Tarjeta', cantidad: '240' } },
+    { label: 'Bono Fisio Resp · Efectivo · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio Resp', como_paga: 'Efectivo', cantidad: '240' } },
+    { label: 'Bono Pilates · Tarjeta · 75€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Pilates', como_paga: 'Tarjeta', cantidad: '75' } },
+    { label: 'Bono Pilates · Efectivo · 75€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Pilates', como_paga: 'Efectivo', cantidad: '75' } }
   ];
 
   function getPresetFieldIndex(fieldKey) {
@@ -528,6 +536,9 @@ var COMBO_PRESETS = [
     if (/^que_paga$|^que paga$/.test(h)) {
       return 'Sesion';
     }
+    if (/^sesion_o_solopago$|^sesion o solo pago$/.test(h)) {
+      return 'Sesion';
+    }
     if (/^numero operacion$|^numero de operacion$|^n.? operacion$/.test(h)) {
       return '0';
     }
@@ -770,7 +781,7 @@ var COMBO_PRESETS = [
     var details = groups.map(function(pair) {
       var s = rowDataSummary(pair.fila1);
       var lbl = 'D' + (pair.group + 1) + ': ' + s.fecha + ' ' + s.hora + ' ' + s.cliente + ' ' + s.cantidad + '€ (filas ' + pair.rows.join(', ') + ' · ' + pair.total + ' filas)';
-      var btn = ' <button type="button" class="btn tiny danger" data-del-dup-group="' + pair.group + '" title="Elimina las ' + pair.total + ' filas de este grupo duplicado de una sola vez">Eliminar grupo</button>';
+      var btn = ' <button type="button" class="btn tiny danger" data-del-dup-group="' + pair.group + '" title="Conserva la fila ' + pair.rows[0] + ' y elimina las ' + (pair.total - 1) + ' restantes del grupo">Dejar 1</button>';
       return lbl + btn;
     });
     var suffix = duplicatePairs.length > 4 ? ' ...' : '';
@@ -779,7 +790,7 @@ var COMBO_PRESETS = [
       'Aviso de duplicados: ' + duplicatePairs.length +
       ' grupos repetidos. ' +
       details.join(' | ') + suffix +
-      (duplicatePairs.length > 1 ? ' <button type="button" class="btn tiny danger" data-del-all-dups="1" title="Elimina todos los registros de los grupos duplicados">Eliminar todos</button>' : '');
+      (duplicatePairs.length > 1 ? ' <button type="button" class="btn tiny danger" data-del-all-dups="1" title="Conserva 1 fila de cada grupo y elimina el resto de duplicados">Dejar 1 de cada</button>' : '');
     duplicatesBoxEl.hidden = false;
   }
 
@@ -1598,30 +1609,42 @@ var COMBO_PRESETS = [
       .crearRegistro(currentToken, currentModuleId, payload);
   }
 
+  function eliminarRegistrosRemotos(realIndexes, mensajeError) {
+    clearError();
+    refreshCurrentModuleData(function() {
+      var reindexados = reindexarIndicesReales(realIndexes);
+      if (!reindexados) {
+        showError('Alguno de los registros ya no existe: puede que otra persona lo haya eliminado ya. Se ha actualizado la tabla.');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
+            try {
+              cargarCalendario();
+            } catch (e) {}
+          });
+        })
+        .withFailureHandler(function(err) {
+          showError((err && err.message) ? err.message : mensajeError);
+        })
+        .eliminarRegistrosDuplicados(currentToken, currentModuleId, reindexados);
+    });
+  }
+
   function deleteDuplicateGroup(gid) {
     var grupo = duplicateGroups[gid];
-    if (!grupo || !grupo.localIndexes || !grupo.localIndexes.length) {
+    if (!grupo || !grupo.localIndexes || grupo.localIndexes.length < 2) {
       return;
     }
-    if (!confirm('¿Eliminar los ' + grupo.total + ' registros duplicados de este grupo (filas ' + grupo.rows.join(', ') + ')?')) {
+    if (!confirm('¿Conservar la fila ' + grupo.rows[0] + ' y eliminar las otras ' + (grupo.localIndexes.length - 1) + ' filas duplicadas de este grupo?')) {
       return;
     }
-    var realIndexes = grupo.localIndexes.map(function(local) {
+    var realIndexes = grupo.localIndexes.slice(1).map(function(local) {
       return toRealRowIndex(local);
     });
-    clearError();
-    google.script.run
-      .withSuccessHandler(function() {
-        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
-          try {
-            cargarCalendario();
-          } catch (e) {}
-        });
-      })
-      .withFailureHandler(function(err) {
-        showError((err && err.message) ? err.message : 'No se pudo eliminar el grupo duplicado.');
-      })
-      .eliminarRegistrosDuplicados(currentToken, currentModuleId, realIndexes);
+    eliminarRegistrosRemotos(realIndexes, 'No se pudieron eliminar los duplicados.');
   }
 
   function deleteAllDuplicateGroups() {
@@ -1631,28 +1654,29 @@ var COMBO_PRESETS = [
     var totalFilas = duplicateGroups.reduce(function(acc, g) {
       return acc + (g.localIndexes ? g.localIndexes.length : 0);
     }, 0);
-    if (!confirm('¿Eliminar los ' + totalFilas + ' registros de todos los grupos duplicados?')) {
+    var aEliminar = totalFilas - duplicateGroups.length;
+    if (!confirm('¿Conservar 1 fila de cada grupo y eliminar los ' + aEliminar + ' registros duplicados restantes?')) {
       return;
     }
     var realIndexes = [];
     duplicateGroups.forEach(function(g) {
-      (g.localIndexes || []).forEach(function(local) {
+      (g.localIndexes || []).slice(1).forEach(function(local) {
         realIndexes.push(toRealRowIndex(local));
       });
     });
-    clearError();
-    google.script.run
-      .withSuccessHandler(function() {
-        loadModule(currentModuleId, currentModuleName, currentAllowsInvoice, function() {
-          try {
-            cargarCalendario();
-          } catch (e) {}
-        });
-      })
-      .withFailureHandler(function(err) {
-        showError((err && err.message) ? err.message : 'No se pudieron eliminar los duplicados.');
-      })
-      .eliminarRegistrosDuplicados(currentToken, currentModuleId, realIndexes);
+    eliminarRegistrosRemotos(realIndexes, 'No se pudieron eliminar los duplicados.');
+  }
+
+  function reindexarIndicesReales(realIndexes) {
+    var reindexados = [];
+    for (var i = 0; i < realIndexes.length; i++) {
+      var local = sourceRowIndexMap.indexOf(realIndexes[i]);
+      if (local === -1) {
+        return null;
+      }
+      reindexados.push(toRealRowIndex(local));
+    }
+    return reindexados;
   }
 
   function deleteRow(rowIndex) {
@@ -1664,8 +1688,8 @@ var COMBO_PRESETS = [
     clearError();
 
     refreshCurrentModuleData(function() {
-      var localIndex = sourceRowIndexMap.indexOf(realIndex);
-      if (localIndex === -1) {
+      var reindexados = reindexarIndicesReales([realIndex]);
+      if (!reindexados) {
         showError('Este registro ya no existe: puede que otra persona lo haya eliminado ya. Se ha actualizado la tabla.');
         return;
       }
@@ -1681,7 +1705,7 @@ var COMBO_PRESETS = [
         .withFailureHandler(function(err) {
           showError((err && err.message) ? err.message : 'No se pudo eliminar el registro.');
         })
-        .eliminarRegistro(currentToken, currentModuleId, realIndex);
+        .eliminarRegistro(currentToken, currentModuleId, reindexados[0]);
     });
   }
 

@@ -236,6 +236,30 @@ body {
   z-index: 60;
 }
 
+.error-box-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  width: max-content;
+  z-index: 200;
+  box-shadow: 0 12px 32px rgba(47, 86, 83, 0.35);
+  font-weight: 600;
+}
+
+.duplicates-box-toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  width: max-content;
+  z-index: 200;
+  box-shadow: 0 12px 32px rgba(122, 64, 8, 0.3);
+  font-weight: 600;
+}
+
 .duplicates-box {
   background: #fff4e8;
   border: 1px solid #f2cf9f;
