@@ -41,26 +41,42 @@ Informacion de la web:
     max_tokens: 500
   };
 
+  const modelos = [
+    'llama-3.1-8b-instant',
+    'llama-3.3-70b-versatile',
+    'gemma2-9b-it',
+    'llama-3.2-3b-preview',
+    'mixtral-8x7b-32768'
+  ];
+
   const url = 'https://api.groq.com/openai/v1/chat/completions';
 
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    headers: {
-      'Authorization': 'Bearer ' + apiKey,
-      'Content-Type': 'application/json'
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
+  for (var i = 0; i < modelos.length; i++) {
+    payload.model = modelos[i];
 
-  const data = JSON.parse(response.getContentText());
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
 
-  if (data.error) {
-    Logger.log('GROQ error: ' + JSON.stringify(data.error));
-    return 'Error de API: ' + (data.error.message || JSON.stringify(data.error));
+    const data = JSON.parse(response.getContentText());
+
+    if (data.error) {
+      Logger.log('GROQ ' + modelos[i] + ' error: ' + (data.error.message || JSON.stringify(data.error)));
+      continue;
+    }
+
+    const texto = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+      ? data.choices[0].message.content
+      : 'No pude generar una respuesta.';
+    Logger.log('GROQ modelo usado: ' + modelos[i]);
+    return texto;
   }
 
-  return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-    ? data.choices[0].message.content
-    : 'No pude generar una respuesta.';
+  return 'No se pudo conectar con GROQ: todos los modelos fallaron. Revisa la clave API.';
 }
