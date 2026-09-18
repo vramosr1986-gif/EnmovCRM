@@ -1,5 +1,5 @@
 function responderBotWeb(token, pregunta) {
-  requireAuthorizedSession(token);
+  requireSession(token);
 
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!apiKey) {
