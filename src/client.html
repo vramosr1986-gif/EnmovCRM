@@ -77,25 +77,33 @@
   let touchTapState = null;
 
   function showError(text) {
+    if (modalOverlayEl && !modalOverlayEl.hidden && modalBodyEl) {
+      var prev = modalBodyEl.querySelector('.modal-inline-error');
+      if (prev) prev.remove();
+      var errDiv = document.createElement('div');
+      errDiv.className = 'error-box modal-inline-error';
+      errDiv.textContent = text;
+      modalBodyEl.insertBefore(errDiv, modalBodyEl.firstChild);
+      return;
+    }
     errorBoxEl.textContent = text;
     errorBoxEl.hidden = false;
-    if (modalBodyEl && !modalBodyEl.hidden && modalOverlayEl && modalOverlayEl.classList && modalOverlayEl.classList.contains('modal-open')) {
-      errorBoxEl.classList.add('error-box-toast');
-    } else {
-      errorBoxEl.classList.remove('error-box-toast');
-    }
   }
 
   function showSuccess(text) {
+    if (modalOverlayEl && !modalOverlayEl.hidden && modalBodyEl) {
+      var prev = modalBodyEl.querySelector('.modal-inline-success');
+      if (prev) prev.remove();
+      var okDiv = document.createElement('div');
+      okDiv.className = 'success-box modal-inline-success';
+      okDiv.textContent = text;
+      modalBodyEl.insertBefore(okDiv, modalBodyEl.firstChild);
+      return;
+    }
     errorBoxEl.textContent = text;
     errorBoxEl.hidden = false;
-    if (modalBodyEl && !modalBodyEl.hidden && modalOverlayEl && modalOverlayEl.classList && modalOverlayEl.classList.contains('modal-open')) {
-      errorBoxEl.classList.add('success-box-toast');
-      errorBoxEl.classList.remove('error-box-toast');
-    } else {
-      errorBoxEl.classList.remove('success-box-toast');
-      errorBoxEl.classList.add('error-box-toast');
-    }
+    errorBoxEl.classList.remove('error-box-toast');
+    errorBoxEl.classList.add('success-box-toast');
   }
 
   function clearError() {
@@ -122,6 +130,7 @@
   function openModal(title) {
     modalTitleEl.textContent = title;
     modalOverlayEl.hidden = false;
+    clearError();
   }
 
   function closeModal() {
@@ -227,7 +236,7 @@
     }
 
     if (/^que_paga$|^que_paga\*$/.test(key)) {
-      return ['Sesion', 'Pilates', 'Fisio', 'Fisio Resp', 'Bono', 'Bono Fisio', 'Bono Fisio Resp', 'Bono Pilates'];
+      return ['Fisio', 'Fisio Respi', 'Pilates', 'Bono Fisio', 'Bono Respi', 'Bono Pilates'];
     }
 
     if (/^como_paga$|^como_paga\*$/.test(key)) {
@@ -242,19 +251,19 @@
   }
 
 var COMBO_PRESETS = [
-    { label: 'Fisio · Sesion · Tarjeta · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '45' } },
-    { label: 'Fisio · Sesion · Efectivo · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '45' } },
-    { label: 'Fisio · Sesion · Bono', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono', cantidad: '0' } },
-    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '50' } },
-    { label: 'Fisio Resp · Sesion · Efectivo · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '50' } },
-    { label: 'Fisio Resp · Sesion · Bono', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono', cantidad: '0' } },
-    { label: 'Pilates · Sesion · Tarjeta · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '25' } },
-    { label: 'Pilates · Sesion · Efectivo · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Efectivo', cantidad: '25' } },
-    { label: 'Pilates · Sesion · Bono', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Sesion', como_paga: 'Bono', cantidad: '0' } },
+    { label: 'Fisio · Sesion · Tarjeta · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio', como_paga: 'Tarjeta', cantidad: '45' } },
+    { label: 'Fisio · Sesion · Efectivo · 45€', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio', como_paga: 'Efectivo', cantidad: '45' } },
+    { label: 'Fisio · Sesion · Bono', grupo: 'Fisio', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio', como_paga: 'Bono', cantidad: '0' } },
+    { label: 'Fisio Resp · Sesion · Tarjeta · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio Respi', como_paga: 'Tarjeta', cantidad: '50' } },
+    { label: 'Fisio Resp · Sesion · Efectivo · 50€', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio Respi', como_paga: 'Efectivo', cantidad: '50' } },
+    { label: 'Fisio Resp · Sesion · Bono', grupo: 'Fisio Respi', cat: 'fisio', values: { sesion_o_solopago: 'Sesion', que_paga: 'Fisio Respi', como_paga: 'Bono', cantidad: '0' } },
+    { label: 'Pilates · Sesion · Tarjeta · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Pilates', como_paga: 'Tarjeta', cantidad: '25' } },
+    { label: 'Pilates · Sesion · Efectivo · 25€', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Pilates', como_paga: 'Efectivo', cantidad: '25' } },
+    { label: 'Pilates · Sesion · Bono', grupo: 'Pilates', cat: 'pilates', values: { sesion_o_solopago: 'Sesion', que_paga: 'Pilates', como_paga: 'Bono', cantidad: '0' } },
     { label: 'Bono Fisio · Tarjeta · 200€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio', como_paga: 'Tarjeta', cantidad: '200' } },
     { label: 'Bono Fisio · Efectivo · 200€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio', como_paga: 'Efectivo', cantidad: '200' } },
-    { label: 'Bono Fisio Resp · Tarjeta · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio Resp', como_paga: 'Tarjeta', cantidad: '240' } },
-    { label: 'Bono Fisio Resp · Efectivo · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Fisio Resp', como_paga: 'Efectivo', cantidad: '240' } },
+    { label: 'Bono Respi · Tarjeta · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Respi', como_paga: 'Tarjeta', cantidad: '240' } },
+    { label: 'Bono Respi · Efectivo · 240€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Respi', como_paga: 'Efectivo', cantidad: '240' } },
     { label: 'Bono Pilates · Tarjeta · 75€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Pilates', como_paga: 'Tarjeta', cantidad: '75' } },
     { label: 'Bono Pilates · Efectivo · 75€', grupo: 'Pagos', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono Pilates', como_paga: 'Efectivo', cantidad: '75' } }
   ];
@@ -522,6 +531,26 @@ var COMBO_PRESETS = [
     return null;
   }
 
+  function validarValoresObligatorios(values) {
+    if (clientColIdx >= 0) {
+      var cliente = String(values[clientColIdx] == null ? '' : values[clientColIdx]).trim();
+      if (!cliente) {
+        return 'El campo "Cliente" no puede estar vacio.';
+      }
+    }
+    if (paymentColIdx >= 0 && amountColIdx >= 0) {
+      var pago = normalize(String(values[paymentColIdx] == null ? '' : values[paymentColIdx]));
+      if (pago === 'efectivo') {
+        var cantidadTxt = String(values[amountColIdx] == null ? '' : values[amountColIdx]).trim();
+        var cantidadNum = parseNumber(cantidadTxt);
+        if (cantidadTxt === '' || cantidadNum == null || cantidadNum === 0) {
+          return 'Si el pago es Efectivo, la cantidad no puede ser 0.';
+        }
+      }
+    }
+    return validarOperacionTarjeta(values);
+  }
+
   function refreshSesionSoloPagoOptions() {
     if (modalMode !== 'create' && modalMode !== 'edit') {
       return;
@@ -572,7 +601,7 @@ var COMBO_PRESETS = [
       return currentUserNombre || 'Magui';
     }
     if (/^que_paga$|^que paga$/.test(h)) {
-      return 'Sesion';
+      return 'Fisio';
     }
     if (/^sesion_o_solopago$|^sesion o solo pago$/.test(h)) {
       return 'Sesion';
@@ -1433,7 +1462,7 @@ var COMBO_PRESETS = [
     }
     values[state.colIndex] = cleanValue;
 
-    var opError = validarOperacionTarjeta(values);
+    var opError = validarValoresObligatorios(values);
     if (opError) {
       showError(opError);
       state.cell.textContent = state.oldValue;
@@ -1580,6 +1609,12 @@ var COMBO_PRESETS = [
 
     var values = collectModalValues();
 
+    var opError = validarValoresObligatorios(values);
+    if (opError) {
+      showError(opError);
+      return;
+    }
+
     google.script.run
       .withSuccessHandler(function() {
         showSuccess('Edición guardada correctamente.');
@@ -1599,7 +1634,7 @@ var COMBO_PRESETS = [
 
     var values = collectModalValues();
 
-    var opError = validarOperacionTarjeta(values);
+    var opError = validarValoresObligatorios(values);
     if (opError) {
       showError(opError);
       return;
