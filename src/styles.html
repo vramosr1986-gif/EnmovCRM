@@ -483,11 +483,60 @@ body {
   margin: 0;
 }
 
+.modal-close-x {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: #5f6f76;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.modal-close-x:hover {
+  background: #eef2f4;
+  color: #111;
+}
+
 .modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.modal-action-buttons {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 12px;
+}
+
+.modal-notice {
+  flex: 1;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.modal-notice-error {
+  background: #f7ecee;
+  border: 1px solid #dfc1c7;
+  color: #6e2f3a;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.modal-notice-success {
+  background: #eef7f0;
+  border: 1px solid #bcdcc6;
+  color: #2e7d57;
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .form-grid {

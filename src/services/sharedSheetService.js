@@ -68,6 +68,23 @@ function getColumnaFisioIdx(headers) {
   return -1;
 }
 
+function getColumnaClienteIdx(headers) {
+  var exactos = ['cliente', 'nombre', 'paciente', 'usuario'];
+  for (var i = 0; i < headers.length; i++) {
+    const key = normalizarTexto(headers[i]).replace(/\s+/g, '_');
+    if (exactos.indexOf(key) !== -1) {
+      return i;
+    }
+  }
+  for (var j = 0; j < headers.length; j++) {
+    const key = normalizarTexto(headers[j]);
+    if (/(cliente|nombre|paciente|usuario)/.test(key)) {
+      return j;
+    }
+  }
+  return -1;
+}
+
 function getColumnaCantidadIdx(headers) {
   for (var i = 0; i < headers.length; i++) {
     if (normalizarTexto(headers[i]) === 'cantidad') {

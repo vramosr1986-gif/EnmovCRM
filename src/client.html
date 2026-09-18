@@ -77,28 +77,30 @@
   let touchTapState = null;
 
   function showError(text) {
-    if (modalOverlayEl && !modalOverlayEl.hidden && modalBodyEl) {
-      var prev = modalBodyEl.querySelector('.modal-inline-error');
-      if (prev) prev.remove();
-      var errDiv = document.createElement('div');
-      errDiv.className = 'error-box modal-inline-error';
-      errDiv.textContent = text;
-      modalBodyEl.insertBefore(errDiv, modalBodyEl.firstChild);
-      return;
+    if (modalOverlayEl && !modalOverlayEl.hidden) {
+      var notice = document.getElementById('modal-notice');
+      if (notice) {
+        notice.textContent = text;
+        notice.classList.add('modal-notice-error');
+        notice.classList.remove('modal-notice-success');
+        notice.hidden = false;
+        return;
+      }
     }
     errorBoxEl.textContent = text;
     errorBoxEl.hidden = false;
   }
 
   function showSuccess(text) {
-    if (modalOverlayEl && !modalOverlayEl.hidden && modalBodyEl) {
-      var prev = modalBodyEl.querySelector('.modal-inline-success');
-      if (prev) prev.remove();
-      var okDiv = document.createElement('div');
-      okDiv.className = 'success-box modal-inline-success';
-      okDiv.textContent = text;
-      modalBodyEl.insertBefore(okDiv, modalBodyEl.firstChild);
-      return;
+    if (modalOverlayEl && !modalOverlayEl.hidden) {
+      var notice = document.getElementById('modal-notice');
+      if (notice) {
+        notice.textContent = text;
+        notice.classList.add('modal-notice-success');
+        notice.classList.remove('modal-notice-error');
+        notice.hidden = false;
+        return;
+      }
     }
     errorBoxEl.textContent = text;
     errorBoxEl.hidden = false;
@@ -109,6 +111,11 @@
   function clearError() {
     errorBoxEl.hidden = true;
     errorBoxEl.textContent = '';
+    var notice = document.getElementById('modal-notice');
+    if (notice) {
+      notice.hidden = true;
+      notice.textContent = '';
+    }
   }
 
   function clearDuplicatesWarning() {
