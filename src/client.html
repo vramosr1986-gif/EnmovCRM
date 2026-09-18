@@ -223,15 +223,14 @@
   }
 
   var COMBO_PRESETS = [
-    { label: 'Pilates · Sesion · Efectivo', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Efectivo' } },
-    { label: 'Pilates · Sesion · Tarjeta', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
-    { label: 'Pilates · Bono · Efectivo', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Efectivo' } },
-    { label: 'Pilates · Bono · Tarjeta', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta' } },
-    { label: 'Fisio · Sesion · Efectivo', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Efectivo' } },
-    { label: 'Fisio · Sesion · Tarjeta', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta' } },
-    { label: 'Fisio · Bono · Efectivo', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo' } },
-    { label: 'Fisio · Bono · Tarjeta', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta' } },
-    { label: 'Solo pago · Sesion · Efectivo', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Sesion', como_paga: 'Efectivo' } }
+    { label: 'Fisio · Sesion · Bono', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Bono' } },
+    { label: 'Fisio · Bono · Tarjeta · 200€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
+    { label: 'Fisio · Bono · Tarjeta · 240€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '240' } },
+    { label: 'Pago · Bono · Tarjeta · 200€', cat: 'pago', values: { sesion_o_solopago: 'Pago', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '200' } },
+    { label: 'Pilates · Bono · Tarjeta · 37,50€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '37.50' } },
+    { label: 'Pilates · Bono · Tarjeta · 46,87€', cat: 'pilates', values: { sesion_o_solopago: 'Pilates', que_paga: 'Bono', como_paga: 'Tarjeta', cantidad: '46.87' } },
+    { label: 'Fisio · Bono · Efectivo · 200€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Bono', como_paga: 'Efectivo', cantidad: '200' } },
+    { label: 'Fisio · Sesion · Tarjeta · 12,50€', cat: 'fisio', values: { sesion_o_solopago: 'Fisio', que_paga: 'Sesion', como_paga: 'Tarjeta', cantidad: '12.50' } }
   ];
 
   function getPresetFieldIndex(fieldKey) {
