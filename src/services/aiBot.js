@@ -34,23 +34,34 @@ Informacion de la web:
     }]
   };
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey;
+  const modelos = [
+    'gemini-3.6-flash',
+    'gemini-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite'
+  ];
 
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
+  for (var i = 0; i < modelos.length; i++) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelos[i] + ':generateContent?key=' + apiKey;
 
-  const data = JSON.parse(response.getContentText());
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
 
-  if (data.error) {
-    Logger.log('Gemini error: ' + JSON.stringify(data.error));
-    return 'Error de API: ' + (data.error.message || JSON.stringify(data.error));
+    const data = JSON.parse(response.getContentText());
+
+    if (data.error) {
+      Logger.log(modelos[i] + ' error: ' + (data.error.message || JSON.stringify(data.error)));
+      continue;
+    }
+
+    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+      return data.candidates[0].content.parts[0].text;
+    }
   }
 
-  return data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
-    ? data.candidates[0].content.parts[0].text
-    : 'No pude generar una respuesta.';
+  return 'No se pudo generar una respuesta (todos los modelos estan saturados). Inténtalo en unos minutos.';
 }
