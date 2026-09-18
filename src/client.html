@@ -2654,6 +2654,7 @@ var COMBO_PRESETS = [
     currentUserNameEl.textContent = currentUserNombre;
     loginOverlayEl.hidden = true;
     appContentEl.hidden = false;
+  limpiarChatSesionOffline();
     manageUsersBtn.hidden = role !== 'admin';
     mergePdfsBtn.hidden = role !== 'admin';
 
@@ -2803,6 +2804,7 @@ var COMBO_PRESETS = [
   }
 
   logoutBtn.addEventListener('click', function() {
+    limpiarChatSesionOffline();
     google.script.run.logout(currentToken);
     try {
       localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -2833,6 +2835,12 @@ var COMBO_PRESETS = [
   var chatToggleEl = document.getElementById('chat-toggle');
   var chatPanelEl = document.getElementById('chat-panel');
   var chatMessagesEl = document.getElementById('chat-messages');
+
+function limpiarChatSesionOffline() {
+  try {
+    if (chatMessagesEl) { chatMessagesEl.innerHTML = ''; }
+  } catch (e) {}
+}
   var chatInputEl = document.getElementById('chat-input');
   var chatFormEl = document.getElementById('chat-form');
   var chatSendEl = document.getElementById('chat-send');
