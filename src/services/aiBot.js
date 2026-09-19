@@ -100,21 +100,19 @@ function responderBotWeb(token, pregunta) {
     var filtros = params.filtros || {};
 
     if (filtros.fecha) {
-      var fechaObj;
-      if (filtros.fecha === 'hoy') fechaObj = hoy;
-      else if (filtros.fecha === 'ayer') fechaObj = ayer;
-      else if (filtros.fecha === 'mes') fechaObj = inicioMes;
-      else fechaObj = filtros.fecha;
-      var fechaNorm = normalizarFechaClave(fechaObj);
-      filtradas = filtradas.filter(function(f) {
-        var v = f[fechaIdx];
-        return fechaIdx >= 0 && normalizarFechaClave(String(v == null ? '' : v)) === (filtros.fecha === 'mes' ? '' : fechaNorm);
-      });
+      var fechaNorm = null;
+      if (filtros.fecha === 'hoy') fechaNorm = normalizarFechaClave(hoy);
+      else if (filtros.fecha === 'ayer') fechaNorm = normalizarFechaClave(ayer);
+      else if (filtros.fecha !== 'mes') fechaNorm = normalizarFechaClave(filtros.fecha);
+
       if (filtros.fecha === 'mes') {
         var inicioNorm = normalizarFechaClave(inicioMes);
         filtradas = filtradas.filter(function(f) {
-          var v = f[fechaIdx];
-          return fechaIdx >= 0 && normalizarFechaClave(String(v == null ? '' : v)) >= inicioNorm;
+          return fechaIdx >= 0 && normalizarFechaClave(String(f[fechaIdx] == null ? '' : f[fechaIdx])) >= inicioNorm;
+        });
+      } else if (fechaNorm !== null) {
+        filtradas = filtradas.filter(function(f) {
+          return fechaIdx >= 0 && normalizarFechaClave(String(f[fechaIdx] == null ? '' : f[fechaIdx])) === fechaNorm;
         });
       }
     }
@@ -226,7 +224,7 @@ function responderBotWeb(token, pregunta) {
     '  orderDir: "asc" | "desc"\n' +
     '  limit: número máx de filas/grupos (defecto 50)\n' +
     '- Si el resultado tiene advertencia (demasiadas filas), díselo al usuario y sugiere refinar.\n' +
-    '- Responde en español, breve y claro. Si no hay datos, di "No aparece en la web".\n' +
+    '- Responde en español, breve y claro. Si el resultado es 0 filas, REINTENTA: prueba con otro filtro o sin filtrar fecha antes de concluir. Solo di "No aparece en la web." si la hoja está realmente vacía.\n' +
     '- NO inventes datos. Solo usa lo que devuelva `query_sheet`.\n' +
     '- El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.\n' +
     '- REGLA OBLIGATORIA: Para CUALQUIER pregunta sobre datos (conteos, sumas, listas, filtrados, totales, promedios), DEBES llamar a `query_sheet`. Si respondes sin usarla, tu respuesta será rechazada y se te pedirá que uses la herramienta. Si no hay datos, la tool devolverá resumen vacío y tú responderás "No aparece en la web".';
