@@ -1,3 +1,31 @@
+function parseNumber(entrada) {
+  var t = String(entrada == null ? '' : entrada).replace(/,/g, '.').trim();
+  if (t === '') return null;
+  var n = parseFloat(t);
+  return isNaN(n) ? null : n;
+}
+
+function parseTime(entrada) {
+  var t = String(entrada == null ? '' : entrada).trim();
+  var mm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(t);
+  if (mm) {
+    var h = parseInt(mm[1], 10), mi = parseInt(mm[2], 10), s = mm[3] ? parseInt(mm[3], 10) : 0;
+    if (h < 24 && mi < 60 && s < 60) return h * 3600 + mi * 60 + s;
+  }
+  return null;
+}
+
+function parseDate(entrada) {
+  var t = String(entrada == null ? '' : entrada).trim();
+  var dm = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/.exec(t);
+  if (dm) {
+    var d = new Date(parseInt(dm[3], 10), parseInt(dm[2], 10) - 1, parseInt(dm[1], 10));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  var id = new Date(t);
+  return isNaN(id.getTime()) ? null : id;
+}
+
 function responderBotWeb(token, pregunta) {
   var sesion = requireSession(token != '' ? token : '');
   var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
@@ -304,7 +332,10 @@ function responderBotWeb(token, pregunta) {
             var argsDefecto = { modulo: moduloDefecto, limit: 20 };
             var resForzada = executeQuery(argsDefecto);
             messages.push(msg);
-            messages.push({ role: 'tool', tool_call_id: 'forced_' + Date.now(), content: JSON.stringify(resForzada) });
+            messages.push({
+              role: 'user',
+              content: 'Debes responder usando query_sheet. Primera pasada: ' + JSON.stringify(resForzada) + '. Llama a query_sheet (o reutiliza estos datos) y responde con datos reales, nunca inventes.'
+            });
             continue; // re-intento con datos
           }
           guardarHistorial(obtenerHistorial().concat([
