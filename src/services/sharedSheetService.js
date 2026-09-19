@@ -97,9 +97,13 @@ function getColumnaCantidadIdx(headers) {
 function getColumnaFechaIdx(headers) {
   var exactos = ['fecha de la sesion', 'fecha sesion', 'fecha de sesion', 'fecha'];
   for (var i = 0; i < headers.length; i++) {
-    const key = normalizarTexto(headers[i]).replace(/\s+/g, '_');
-    if (exactos.indexOf(key) !== -1) {
+    if (exactos.indexOf(normalizarTexto(headers[i])) !== -1) {
       return i;
+    }
+  }
+  for (var j = 0; j < headers.length; j++) {
+    if (/(fecha|dia)/.test(normalizarTexto(headers[j]))) {
+      return j;
     }
   }
   return -1;
@@ -108,9 +112,13 @@ function getColumnaFechaIdx(headers) {
 function getColumnaHoraIdx(headers) {
   var exactos = ['hora de la sesion', 'hora sesion', 'hora de sesion', 'hora'];
   for (var i = 0; i < headers.length; i++) {
-    const key = normalizarTexto(headers[i]).replace(/\s+/g, '_');
-    if (exactos.indexOf(key) !== -1) {
+    if (exactos.indexOf(normalizarTexto(headers[i])) !== -1) {
       return i;
+    }
+  }
+  for (var j = 0; j < headers.length; j++) {
+    if (/(hora)/.test(normalizarTexto(headers[j]))) {
+      return j;
     }
   }
   return -1;
