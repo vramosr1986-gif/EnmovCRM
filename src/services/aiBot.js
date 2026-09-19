@@ -298,12 +298,15 @@ function responderBotWeb(token, pregunta) {
     { role: 'system', content: systemPrompt }
   ].concat(obtenerHistorial().slice(-6)).concat([{ role: 'user', content: pregunta }]);
 
+  var ultimoError = '';
   for (var intento = 0; intento < 3; intento++) {
     for (var m = 0; m < modelos.length; m++) {
       try {
         var data = llamarGroq(modelos[m], messages);
-        if (!data.choices || !data.choices[0]) continue;
+        if (data && data.error) { ultimoError = data.error.message || JSON.stringify(data.error); }
+        if (!data || !data.choices || !data.choices[0]) continue;
         var msg = data.choices[0].message;
+        if (data.choices[0].finish_reason === 'length') { ultimoError = 'respuesta truncada por tokens'; }
 
         if (msg.tool_calls && msg.tool_calls.length > 0) {
           messages.push(msg);
@@ -345,11 +348,12 @@ function responderBotWeb(token, pregunta) {
           return respuesta;
         }
       } catch (e) {
+        ultimoError = (e && e.message) ? e.message : String(e);
         Logger.log('GROQ error: ' + e);
       }
     }
   }
-  return 'No se pudo conectar con el asistente. Intenta de nuevo.';
+  return 'No se pudo conectar con el asistente. Detalle: ' + (ultimoError || 'desconocido');
 }
 
 function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
