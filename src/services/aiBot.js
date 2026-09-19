@@ -1,158 +1,241 @@
 function responderBotWeb(token, pregunta) {
-  // ================= 1) SESION Y ROL =================
   var sesion = requireSession(token != '' ? token : '');
   var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
   var nombreSesion = sesion.nombre || sesion.username || '';
   var rolSesion = esAdmin ? 'administrador' : 'fisioterapeuta';
 
-  // ================= 2) DATOS: SOLO los modulos que el usuario puede ver =================
   var modulosPermitidos = Array.isArray(sesion.modules) ? sesion.modules : [];
-  var fragmentos = [];
-  fragmentos.push('El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.');
-  fragmentos.push('\nCATALOGO DE PRECIOS:');
-  fragmentos.push('Sesion de Fisio = 45€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
-  fragmentos.push('Sesion de Fisio Respi = 50€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
-  fragmentos.push('Sesion de Pilates = 25€ (se puede pagar con Tarjeta, Efectivo o Bono ya comprado).');
-  fragmentos.push('Bono de Fisio = 200€ (compra unica con Tarjeta o Efectivo).');
-  fragmentos.push('Bono de Respi = 240€ (compra unica con Tarjeta o Efectivo).');
-  fragmentos.push('Bono de Pilates = 75€ (compra unica con Tarjeta o Efectivo).');
 
-  var nombreModulo = '';
-  for (var i = 0; i < modulosPermitidos.length && i < 4; i++) {
-    var modulo = modulosPermitidos[i];
-    if (MODULOS.ENMOV === modulo) { nombreModulo = 'En Movimiento Sano (Enmov)'; }
-    else if (MODULOS.NAVTA === modulo) { nombreModulo = 'Navta'; }
-    else if (MODULOS.DOMICILIACIONES === modulo) { nombreModulo = 'Domiciliaciones'; }
-
-    try {
-      var grid = getGridDataByModulo(modulo);
-      var gridFiltrado = esAdmin ? grid : filtrarGridPorFisio(grid, sesion.fisioFiltro || '');
-      var headers = (gridFiltrado.headers || []);
-      var filas = gridFiltrado.rows || [];
-
-      fragmentos.push('\nMODULO: ' + nombreModulo);
-      fragmentos.push('Columnas: ' + headers.join(' | '));
-
-      var fechaIdx = getColumnaFechaIdx(headers);
-      var clienteIdx = getColumnaClienteIdx(headers);
-      var cantidadIdx = getColumnaCantidadIdx(headers);
-      var pagoIdx = -1;
-      for (var ci = 0; ci < headers.length; ci++) {
-        if (normalizarTexto(headers[ci]).indexOf('como_paga') !== -1 || normalizarTexto(headers[ci]).indexOf('como paga') !== -1) {
-          pagoIdx = ci; break;
-        }
+  var SCHEMA = {
+    ENMOV: {
+      nombre: 'En Movimiento Sano (Enmov)',
+      columnas: {
+        fecha: { idxFn: 'getColumnaFechaIdx', tipo: 'date' },
+        hora: { idxFn: 'getColumnaHoraIdx', tipo: 'time' },
+        cliente: { idxFn: 'getColumnaClienteIdx', tipo: 'string' },
+        fisio: { idxFn: 'getColumnaFisioIdx', tipo: 'string' },
+        cantidad: { idxFn: 'getColumnaCantidadIdx', tipo: 'number' },
+        pago: { idxFn: 'custom', tipo: 'string', desc: 'como_paga / como paga (efectivo|tarjeta|bono)' }
       }
-      var fisioIdx = getColumnaFisioIdx(headers);
-      var horaIdx = getColumnaHoraIdx(headers);
+    },
+    NAVTA: { nombre: 'Navta', columnas: {} },
+    DOMICILIACIONES: { nombre: 'Domiciliaciones', columnas: {} }
+  };
 
-      var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
-      var ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
-      var ayer = Utilities.formatDate(ayerDate, 'Europe/Madrid', 'dd/MM/yyyy');
-      var inicioMes = Utilities.formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'Europe/Madrid', 'dd/MM/yyyy');
+  var MAX_ROWS = 50;
+  var MAX_TOKENS_RESPONSE = 500;
 
-      var sesionesHoy = 0, clientesHoy = [], dineroHoy = 0, dineroHoyEfectivo = 0, dineroHoyTarjeta = 0, dineroHoyBono = 0;
-      var sesionesAyer = 0, clientesAyer = [], dineroAyer = 0;
-      var sesionesMes = 0, clientesMes = [], dineroMes = 0, dineroMesEfectivo = 0, dineroMesTarjeta = 0, dineroMesBono = 0;
-      var totalRegistros = filas.length, totalDinero = 0, totalEfectivo = 0, totalTarjeta = 0, totalBono = 0;
-      var clientesTotales = [];
-
-      for (var f = 0; f < filas.length; f++) {
-        var fila = filas[f];
-        var valFecha = fila[fechaIdx];
-        var fechaNorm = fechaIdx >= 0 ? normalizarFechaClave(String(valFecha == null ? '' : valFecha)) : '';
-        var esHoy = fechaIdx >= 0 && fechaNorm === normalizarFechaClave(hoy);
-        var esAyer = fechaIdx >= 0 && fechaNorm === normalizarFechaClave(ayer);
-        var esMes = fechaIdx >= 0 && fechaNorm >= normalizarFechaClave(inicioMes);
-
-        var nomCliente = clienteIdx >= 0 ? String(fila[clienteIdx] || '').trim() : '';
-        var cant = cantidadIdx >= 0 ? parseNumber(String(fila[cantidadIdx] == null ? '' : fila[cantidadIdx])) : null;
-        var pago = pagoIdx >= 0 ? normalize(String(fila[pagoIdx] == null ? '' : fila[pagoIdx])) : '';
-
-        if (nomCliente && clientesTotales.indexOf(nomCliente) === -1) clientesTotales.push(nomCliente);
-        if (cant != null && cant > 0) {
-          totalDinero += cant;
-          if (pago === 'efectivo') totalEfectivo += cant;
-          else if (pago === 'tarjeta') totalTarjeta += cant;
-          else if (pago === 'bono') totalBono += cant;
-        }
-
-        if (esHoy) {
-          sesionesHoy++;
-          if (nomCliente && clientesHoy.indexOf(nomCliente) === -1) clientesHoy.push(nomCliente);
-          if (cant != null && cant > 0) {
-            dineroHoy += cant;
-            if (pago === 'efectivo') dineroHoyEfectivo += cant;
-            else if (pago === 'tarjeta') dineroHoyTarjeta += cant;
-            else if (pago === 'bono') dineroHoyBono += cant;
-          }
-        }
-        if (esAyer) {
-          sesionesAyer++;
-          if (nomCliente && clientesAyer.indexOf(nomCliente) === -1) clientesAyer.push(nomCliente);
-          if (cant != null && cant > 0) dineroAyer += cant;
-        }
-        if (esMes) {
-          sesionesMes++;
-          if (nomCliente && clientesMes.indexOf(nomCliente) === -1) clientesMes.push(nomCliente);
-          if (cant != null && cant > 0) {
-            dineroMes += cant;
-            if (pago === 'efectivo') dineroMesEfectivo += cant;
-            else if (pago === 'tarjeta') dineroMesTarjeta += cant;
-            else if (pago === 'bono') dineroMesBono += cant;
-          }
-        }
-      }
-
-      fragmentos.push('\nMODULO: ' + nombreModulo);
-      fragmentos.push('Columnas: ' + headers.join(' | '));
-      fragmentos.push('RESUMEN TOTAL: ' + totalRegistros + ' registros, ' + clientesTotales.length + ' pacientes unicos, ' + totalDinero + '€ total (Efectivo: ' + totalEfectivo + '€, Tarjeta: ' + totalTarjeta + '€, Bono: ' + totalBono + '€).');
-      fragmentos.push('HOY (' + hoy + '): ' + sesionesHoy + ' sesiones, ' + clientesHoy.length + ' pacientes, ' + dineroHoy + '€ (Efectivo: ' + dineroHoyEfectivo + ', Tarjeta: ' + dineroHoyTarjeta + ', Bono: ' + dineroHoyBono + ').');
-      fragmentos.push('AYER (' + ayer + '): ' + sesionesAyer + ' sesiones, ' + clientesAyer.length + ' pacientes, ' + dineroAyer + '€.');
-      fragmentos.push('MES ACTUAL (desde ' + inicioMes + '): ' + sesionesMes + ' sesiones, ' + clientesMes.length + ' pacientes, ' + dineroMes + '€ (Efectivo: ' + dineroMesEfectivo + ', Tarjeta: ' + dineroMesTarjeta + ', Bono: ' + dineroMesBono + ').');
-
-      var filasHoy = [];
-      for (var f2 = 0; f2 < filas.length; f2++) {
-        var valFechaHoy = filas[f2][fechaIdx];
-        if (fechaIdx < 0 || normalizarFechaClave(String(valFechaHoy == null ? '' : valFechaHoy)) === normalizarFechaClave(hoy)) {
-          filasHoy.push(filas[f2]);
-        }
-      }
-
-      if (filasHoy.length === 0) {
-        fragmentos.push('No hay sesiones hoy.');
-      } else {
-        var maxFilas = Math.min(10, filasHoy.length);
-        fragmentos.push('Sesiones de hoy (mostrando ' + maxFilas + ' de ' + filasHoy.length + '):');
-        for (var j = 0; j < maxFilas; j++) {
-          var detalle = [];
-          if (clienteIdx >= 0) { var v = filasHoy[j][clienteIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Cliente=' + String(v).trim()); }
-          if (fisioIdx >= 0) { v = filasHoy[j][fisioIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Fisio=' + String(v).trim()); }
-          if (cantidadIdx >= 0) { v = filasHoy[j][cantidadIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Cant=' + String(v).trim()); }
-          if (pagoIdx >= 0) { v = filasHoy[j][pagoIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Pago=' + String(v).trim()); }
-          if (horaIdx >= 0) { v = filasHoy[j][horaIdx]; if (v !== undefined && v !== null && String(v).trim() !== '') detalle.push('Hora=' + String(v).trim()); }
-          if (detalle.length === 0) { for (var c = 0; c < headers.length && c < 6; c++) { var nomCol = headers[c]; var valor = filasHoy[j][c]; if (valor !== undefined && valor !== null && String(valor).trim() !== '') { detalle.push(nomCol + '=' + String(valor).trim()); } } }
-          fragmentos.push((j + 1) + '.- ' + detalle.join(', '));
-        }
-        if (filasHoy.length > maxFilas) {
-          fragmentos.push('... y ' + (filasHoy.length - maxFilas) + ' más.');
-        }
-      }
-    } catch (e) {
-      fragmentos.push(nombreModulo + ': no se pudo leer (' + e + ')');
-    }
+  function getSchemaForModulo(modulo) {
+    return SCHEMA[modulo] || { nombre: modulo, columnas: {} };
   }
 
-  // ================= 3) GROQ =================
+  function buildSchemaDescription() {
+    var parts = [];
+    for (var i = 0; i < modulosPermitidos.length; i++) {
+      var m = modulosPermitidos[i];
+      var sch = getSchemaForModulo(m);
+      var cols = Object.keys(sch.columnas).join(', ');
+      parts.push(sch.nombre + ' (' + m + '): ' + cols);
+    }
+    return parts.join('\n');
+  }
+
+  function executeQuery(params) {
+    var modulo = params.modulo;
+    if (modulosPermitidos.indexOf(modulo) === -1) {
+      return { error: 'No tienes acceso al modulo ' + modulo };
+    }
+    var grid = getGridDataByModulo(modulo);
+    var sesionLocal = requireSession(token);
+    var gridFiltrado = esAdmin ? grid : filtrarGridPorFisio(grid, sesionLocal.fisioFiltro || '');
+    var headers = gridFiltrado.headers || [];
+    var filas = gridFiltrado.rows || [];
+
+    var schema = getSchemaForModulo(modulo);
+    var fechaIdx = getColumnaFechaIdx(headers);
+    var clienteIdx = getColumnaClienteIdx(headers);
+    var fisioIdx = getColumnaFisioIdx(headers);
+    var cantidadIdx = getColumnaCantidadIdx(headers);
+    var horaIdx = getColumnaHoraIdx(headers);
+    var pagoIdx = -1;
+    for (var ci = 0; ci < headers.length; ci++) {
+      var h = normalizarTexto(headers[ci]);
+      if (h.indexOf('como_paga') !== -1 || h.indexOf('como paga') !== -1) { pagoIdx = ci; break; }
+    }
+
+    var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
+    var ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
+    var ayer = Utilities.formatDate(ayerDate, 'Europe/Madrid', 'dd/MM/yyyy');
+    var inicioMes = Utilities.formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'Europe/Madrid', 'dd/MM/yyyy');
+
+    var filtradas = filas;
+    var filtros = params.filtros || {};
+
+    if (filtros.fecha) {
+      var fechaObj;
+      if (filtros.fecha === 'hoy') fechaObj = hoy;
+      else if (filtros.fecha === 'ayer') fechaObj = ayer;
+      else if (filtros.fecha === 'mes') fechaObj = inicioMes;
+      else fechaObj = filtros.fecha;
+      var fechaNorm = normalizarFechaClave(fechaObj);
+      filtradas = filtradas.filter(function(f) {
+        var v = f[fechaIdx];
+        return fechaIdx >= 0 && normalizarFechaClave(String(v == null ? '' : v)) === (filtros.fecha === 'mes' ? '' : fechaNorm);
+      });
+      if (filtros.fecha === 'mes') {
+        var inicioNorm = normalizarFechaClave(inicioMes);
+        filtradas = filtradas.filter(function(f) {
+          var v = f[fechaIdx];
+          return fechaIdx >= 0 && normalizarFechaClave(String(v == null ? '' : v)) >= inicioNorm;
+        });
+      }
+    }
+    if (filtros.fisio && fisioIdx >= 0) {
+      var fisioNorm = normalizarTexto(filtros.fisio);
+      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[fisioIdx] || '')) === fisioNorm; });
+    }
+    if (filtros.cliente && clienteIdx >= 0) {
+      var cliNorm = normalizarTexto(filtros.cliente);
+      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[clienteIdx] || '')).indexOf(cliNorm) !== -1; });
+    }
+    if (filtros.pago && pagoIdx >= 0) {
+      var pagoNorm = normalizarTexto(filtros.pago);
+      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[pagoIdx] || '')) === pagoNorm; });
+    }
+
+    var groupBy = params.groupBy;
+    var aggregates = params.aggregates || ['count'];
+    var orderBy = params.orderBy;
+    var orderDir = params.orderDir || 'desc';
+    var limit = params.limit || 50;
+
+    var resultado = { filas: [], resumen: {} };
+
+    if (groupBy && groupBy !== 'none') {
+      var grupoIdx = -1;
+      if (groupBy === 'fisio') grupoIdx = fisioIdx;
+      else if (groupBy === 'cliente') grupoIdx = clienteIdx;
+      else if (groupBy === 'pago') grupoIdx = pagoIdx;
+      else if (groupBy === 'fecha') grupoIdx = fechaIdx;
+
+      if (grupoIdx >= 0) {
+        var grupos = {};
+        for (var f = 0; f < filtradas.length; f++) {
+          var clave = String(filtradas[f][grupoIdx] || '').trim() || '(vacío)';
+          if (!grupos[clave]) grupos[clave] = { count: 0, sum: 0, filas: [] };
+          grupos[clave].count++;
+          var cant = cantidadIdx >= 0 ? parseNumber(String(filtradas[f][cantidadIdx] == null ? '' : filtradas[f][cantidadIdx])) : 0;
+          if (cant) grupos[clave].sum += cant;
+          grupos[clave].filas.push(filtradas[f]);
+        }
+        var items = Object.keys(grupos).map(function(k) {
+          var g = grupos[k];
+          return { grupo: k, count: g.count, suma_cantidad: g.sum, filas: g.filas.slice(0, 5) };
+        });
+        items.sort(function(a, b) {
+          var dir = orderDir === 'asc' ? 1 : -1;
+          if (orderBy === 'suma' || orderBy === 'sum') return (b.suma_cantidad - a.suma_cantidad) * dir;
+          if (orderBy === 'count') return (b.count - a.count) * dir;
+          return (b.count - a.count) * dir;
+        });
+        if (limit > 0) items = items.slice(0, limit);
+        resultado.filas = items;
+        resultado.resumen = { total_grupos: Object.keys(grupos).length, total_filas: filtradas.length };
+      }
+    } else {
+      if (orderBy) {
+        var ordIdx = -1;
+        if (orderBy === 'fecha') ordIdx = fechaIdx;
+        else if (orderBy === 'hora') ordIdx = getColumnaHoraIdx(headers);
+        else if (orderBy === 'cantidad') ordIdx = cantidadIdx;
+        else if (orderBy === 'cliente') ordIdx = clienteIdx;
+        else if (orderBy === 'fisio') ordIdx = fisioIdx;
+
+        if (ordIdx >= 0) {
+          filtradas.sort(function(a, b) {
+            var av = a[ordIdx], bv = b[ordIdx];
+            var an = parseNumber(av), bn = parseNumber(bv);
+            if (an != null && bn != null) return (an - bn) * (orderDir === 'asc' ? 1 : -1);
+            var at = parseTime(av), bt = parseTime(bv);
+            if (at != null && bt != null) return (at - bt) * (orderDir === 'asc' ? 1 : -1);
+            var ad = parseDate(av), bd = parseDate(bv);
+            if (ad && bd) return (ad.getTime() - bd.getTime()) * (orderDir === 'asc' ? 1 : -1);
+            return String(av).localeCompare(String(bv)) * (orderDir === 'asc' ? 1 : -1);
+          });
+        }
+      }
+      var mostrar = limit > 0 ? filtradas.slice(0, limit) : filtradas;
+      resultado.filas = mostrar.map(function(f) {
+        var obj = {};
+        for (var c = 0; c < headers.length && c < 12; c++) {
+          var v = f[c];
+          if (v !== undefined && v !== null && String(v).trim() !== '') obj[headers[c]] = String(v).trim();
+        }
+        return obj;
+      });
+      resultado.resumen = { total_filtradas: filtradas.length, mostradas: resultado.filas.length };
+    }
+
+    if (filtradas.length > MAX_ROWS) {
+      resultado.advertencia = 'Resultado grande: ' + filtradas.length + ' filas. Mostrando primeras ' + resultado.filas.length + '. Refina la consulta (filtra por fecha, fisio, cliente) para ver más detalle.';
+    }
+    return resultado;
+  }
+
+  var systemPrompt = 'Eres el asistente de EnmovCRM. Tienes acceso a la herramienta `query_sheet` para consultar la hoja de datos.\n' +
+    'Módulos disponibles:\n' + buildSchemaDescription() + '\n\n' +
+    'CATÁLOGO DE PRECIOS:\n' +
+    'Sesion de Fisio = 45€\nSesion de Fisio Respi = 50€\nSesion de Pilates = 25€\n' +
+    'Bono de Fisio = 200€\nBono de Respi = 240€\nBono de Pilates = 75€\n\n' +
+    'INSTRUCCIONES:\n' +
+    '- USA `query_sheet` SIEMPRE que el usuario pida datos, conteos, sumas, listas, filtrados.\n' +
+    '- Parámetros de `query_sheet`:\n' +
+    '  modulo (obligatorio): uno de los módulos permitidos\n' +
+    '  filtros: {fecha: "hoy|ayer|mes|YYYY-MM-DD", fisio: "nombre", cliente: "nombre", pago: "efectivo|tarjeta|bono"}\n' +
+    '  groupBy: "fisio" | "cliente" | "pago" | "fecha" | "none" (agrupa y cuenta)\n' +
+    '  aggregates: ["count", "sum_cantidad"] (qué calcular por grupo)\n' +
+    '  orderBy: "fecha" | "hora" | "cantidad" | "cliente" | "fisio"\n' +
+    '  orderDir: "asc" | "desc"\n' +
+    '  limit: número máx de filas/grupos (defecto 50)\n' +
+    '- Si el resultado tiene advertencia (demasiadas filas), díselo al usuario y sugiere refinar.\n' +
+    '- Responde en español, breve y claro. Si no hay datos, di "No aparece en la web".\n' +
+    '- NO inventes datos. Solo usa lo que devuelva `query_sheet`.\n' +
+    '- El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.';
+
   var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
-  if (!apiKey) { return 'El asistente no esta configurado: falta la clave API.'; }
+  if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
 
-  var conocimientos = fragmentos.join('\n');
   var baseGroq = 'https://api.groq.com/openai/v1';
+  var modelos = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
 
-  // Modelos a probar en orden (compound-mini primero, luego los mejores disponibles)
-  var modelos = ['groq/compound-mini', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
-
-  var ultimoError = '';
+  var tools = [{
+    type: 'function',
+    function: {
+      name: 'query_sheet',
+      description: 'Consulta la hoja de datos con filtros, agrupaciones y agregaciones',
+      parameters: {
+        type: 'object',
+        properties: {
+          modulo: { type: 'string', enum: modulosPermitidos },
+          filtros: {
+            type: 'object',
+            properties: {
+              fecha: { type: 'string', description: 'hoy, ayer, mes, o YYYY-MM-DD' },
+              fisio: { type: 'string' },
+              cliente: { type: 'string' },
+              pago: { type: 'string', enum: ['efectivo', 'tarjeta', 'bono'] }
+            }
+          },
+          groupBy: { type: 'string', enum: ['fisio', 'cliente', 'pago', 'fecha', 'none'] },
+          aggregates: { type: 'array', items: { type: 'string', enum: ['count', 'sum_cantidad'] } },
+          orderBy: { type: 'string', enum: ['fecha', 'hora', 'cantidad', 'cliente', 'fisio'] },
+          orderDir: { type: 'string', enum: ['asc', 'desc'] },
+          limit: { type: 'integer', minimum: 1, maximum: 200 }
+        },
+        required: ['modulo']
+      }
+    }
+  }];
 
   function obtenerHistorial() {
     var raw = CacheService.getScriptCache().get('chat_' + token);
@@ -164,17 +247,14 @@ function responderBotWeb(token, pregunta) {
     CacheService.getScriptCache().put('chat_' + token, JSON.stringify(messages), 1800);
   }
 
-  function llamarGroq(modelo) {
-    var historial = obtenerHistorial().slice(-8);
-    var messages = [
-      { role: 'system', content: 'Eres el asistente de EnmovCRM. Responde SOLO con la informacion dada abajo. Si el dato no aparece, responde "No aparece en la web". Se breve, claro y en espanol. Si te piden crear, editar o borrar, NO lo hagas: di que eso requiere confirmacion del administrador.\n\nInformacion:\n' + conocimientos }
-    ].concat(historial).concat([{ role: 'user', content: pregunta }]);
-
+  function llamarGroq(modelo, messages) {
     var payload = {
       model: modelo,
       messages: messages,
-      temperature: 0.5,
-      max_tokens: 300
+      tools: tools,
+      tool_choice: 'auto',
+      temperature: 0.3,
+      max_tokens: MAX_TOKENS_RESPONSE
     };
     var resp = UrlFetchApp.fetch(baseGroq + '/chat/completions', {
       method: 'post',
@@ -185,45 +265,60 @@ function responderBotWeb(token, pregunta) {
     return JSON.parse(resp.getContentText());
   }
 
-  for (var m = 0; m < modelos.length; m++) {
-    try {
-      var data = llamarGroq(modelos[m]);
-      if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-        var respuesta = data.choices[0].message.content;
-        guardarHistorial(obtenerHistorial().concat([
-          { role: 'user', content: pregunta },
-          { role: 'assistant', content: respuesta }
-        ]));
-        return respuesta;
-      }
-      ultimoError = data.error ? (data.error.message || JSON.stringify(data.error)) : 'respuesta vacia';
-    } catch (e2) {
-      ultimoError = String(e2);
-    }
-    Logger.log('GROQ ' + modelos[m] + ': ' + ultimoError);
-  }
+  var messages = [
+    { role: 'system', content: systemPrompt }
+  ].concat(obtenerHistorial().slice(-6)).concat([{ role: 'user', content: pregunta }]);
 
-  return 'No se pudo conectar con GROQ. Error de la API: ' + ultimoError + ' Modelos probados: ' + modelos.join(', ');
+  for (var intento = 0; intento < 3; intento++) {
+    for (var m = 0; m < modelos.length; m++) {
+      try {
+        var data = llamarGroq(modelos[m], messages);
+        if (!data.choices || !data.choices[0]) continue;
+        var msg = data.choices[0].message;
+
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          messages.push(msg);
+          for (var tc = 0; tc < msg.tool_calls.length; tc++) {
+            var call = msg.tool_calls[tc];
+            if (call.function && call.function.name === 'query_sheet') {
+              var args = JSON.parse(call.function.arguments);
+              var resultado = executeQuery(args);
+              messages.push({
+                role: 'tool',
+                tool_call_id: call.id,
+                content: JSON.stringify(resultado)
+              });
+            }
+          }
+          continue;
+        }
+
+        if (msg.content) {
+          var respuesta = msg.content;
+          guardarHistorial(obtenerHistorial().concat([
+            { role: 'user', content: pregunta },
+            { role: 'assistant', content: respuesta }
+          ]));
+          return respuesta;
+        }
+      } catch (e) {
+        Logger.log('GROQ error: ' + e);
+      }
+    }
+  }
+  return 'No se pudo conectar con el asistente. Intenta de nuevo.';
 }
 
 function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
   var sesion = requireSession(token != '' ? token : '');
   var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
-  if (!esAdmin) {
-    return 'Solo el administrador puede ejecutar acciones.';
-  }
+  if (!esAdmin) return 'Solo el administrador puede ejecutar acciones.';
   var permiso = sesion.modules || [];
-  if (permiso.indexOf(modulo) === -1) {
-    return 'No tienes acceso a este modulo.';
-  }
+  if (permiso.indexOf(modulo) === -1) return 'No tienes acceso a este modulo.';
 
   var accionL = String(accion || '').toLowerCase();
-  if (accionL === 'crear') {
-    return crearRegistro(token, modulo, datosFila);
-  } else if (accionL === 'editar') {
-    return actualizarRegistro(token, modulo, indiceFila, datosFila);
-  } else if (accionL === 'eliminar') {
-    return eliminarRegistro(token, modulo, indiceFila);
-  }
+  if (accionL === 'crear') return crearRegistro(token, modulo, datosFila);
+  if (accionL === 'editar') return actualizarRegistro(token, modulo, indiceFila, datosFila);
+  if (accionL === 'eliminar') return eliminarRegistro(token, modulo, indiceFila);
   return 'Accion no reconocida: ' + accion;
 }
