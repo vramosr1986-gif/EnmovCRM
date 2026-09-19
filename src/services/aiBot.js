@@ -235,7 +235,7 @@ function responderBotWeb(token, pregunta) {
   if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
 
   var baseGroq = 'https://api.groq.com/openai/v1';
-  var modelos = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it'];
+  var modelos = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b'];
 
   var tools = [{
     type: 'function',
