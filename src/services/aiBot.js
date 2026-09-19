@@ -51,7 +51,7 @@ function responderBotWeb(token, pregunta) {
   };
 
   var MAX_ROWS = 50;
-  var MAX_TOKENS_RESPONSE = 500;
+  var MAX_TOKENS_RESPONSE = 800;
 
   function getSchemaForModulo(modulo) {
     return SCHEMA[modulo] || { nombre: modulo, columnas: {} };
@@ -235,7 +235,7 @@ function responderBotWeb(token, pregunta) {
   if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
 
   var baseGroq = 'https://api.groq.com/openai/v1';
-  var modelos = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b'];
+  var modelos = ['groq/compound-mini', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
 
   var tools = [{
     type: 'function',
@@ -276,15 +276,17 @@ function responderBotWeb(token, pregunta) {
     CacheService.getScriptCache().put('chat_' + token, JSON.stringify(messages), 1800);
   }
 
-  function llamarGroq(modelo, messages) {
+  function llamarGroq(modelo, mensajes, conTools) {
     var payload = {
       model: modelo,
-      messages: messages,
-      tools: tools,
-      tool_choice: 'auto',
+      messages: mensajes,
       temperature: 0.3,
       max_tokens: MAX_TOKENS_RESPONSE
     };
+    if (conTools) {
+      payload.tools = tools;
+      payload.tool_choice = 'auto';
+    }
     var resp = UrlFetchApp.fetch(baseGroq + '/chat/completions', {
       method: 'post',
       headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
@@ -302,18 +304,21 @@ function responderBotWeb(token, pregunta) {
   for (var intento = 0; intento < 3; intento++) {
     for (var m = 0; m < modelos.length; m++) {
       try {
-        var data = llamarGroq(modelos[m], messages);
-        if (data && data.error) { ultimoError = data.error.message || JSON.stringify(data.error); }
+        var data = llamarGroq(modelos[m], messages, true);
+        if (data && data.error) { ultimoError = data.error.message || JSON.stringify(data.error); continue; }
         if (!data || !data.choices || !data.choices[0]) continue;
         var msg = data.choices[0].message;
         if (data.choices[0].finish_reason === 'length') { ultimoError = 'respuesta truncada por tokens'; }
 
+        var usoTool = false;
+        messages.push(msg);
         if (msg.tool_calls && msg.tool_calls.length > 0) {
-          messages.push(msg);
+          usoTool = true;
           for (var tc = 0; tc < msg.tool_calls.length; tc++) {
             var call = msg.tool_calls[tc];
             if (call.function && call.function.name === 'query_sheet') {
-              var args = JSON.parse(call.function.arguments);
+              var args = null;
+              try { args = JSON.parse(call.function.arguments); } catch (pe) { args = {}; }
               var resultado = executeQuery(args);
               messages.push({
                 role: 'tool',
@@ -322,30 +327,39 @@ function responderBotWeb(token, pregunta) {
               });
             }
           }
-          continue;
         }
 
-        if (msg.content) {
-          var respuesta = msg.content;
-          // Validación: si la pregunta parece de datos pero no hubo tool_call, forzamos uso de tool
-          var pareceDatos = /cuantos?|cuanto|total|suma|promedio|promedio|list|lista|pacientes?|dinero|sesiones?|factur|ingresos?|efectivo|tarjeta|bono|fisio|cliente|mes|ayer|hoy|semana|ano|top|ranking|mas|menos|entre|por\s+\w+/.test(pregunta.toLowerCase());
-          if (pareceDatos) {
-            // Forzamos una llamada a query_sheet genérica para que traiga datos
+        var textoFinal = msg.content;
+        if (!textoFinal && usoTool) {
+          // Pasada final SIN tools para cerrar la respuesta con los datos reales
+          var dataFinal = llamarGroq(modelos[m], messages, false);
+          if (dataFinal && dataFinal.error) {
+            ultimoError = dataFinal.error.message || JSON.stringify(dataFinal.error);
+          }
+          if (dataFinal && dataFinal.choices && dataFinal.choices[0] && dataFinal.choices[0].message.content) {
+            textoFinal = dataFinal.choices[0].message.content;
+          }
+        }
+
+        if (textoFinal) {
+          var pareceDatos = /cuantos?|cuanto|total|suma|promedio|list|lista|pacientes?|dinero|sesiones?|factur|ingresos?|efectivo|tarjeta|bono|fisio|cliente|mes|ayer|hoy|semana|ano|top|ranking|mas|menos|entre/.test(pregunta.toLowerCase());
+          if (pareceDatos && !usoTool) {
+            // El modelo respondio sin consultar: pedimos pasada final con datos reales
             var moduloDefecto = modulosPermitidos[0] || 'ENMOV';
-            var argsDefecto = { modulo: moduloDefecto, limit: 20 };
-            var resForzada = executeQuery(argsDefecto);
-            messages.push(msg);
-            messages.push({
+            var resForzada = executeQuery({ modulo: moduloDefecto, limit: 20 });
+            var dataForzada = llamarGroq(modelos[m], messages.concat([{
               role: 'user',
-              content: 'Debes responder usando query_sheet. Primera pasada: ' + JSON.stringify(resForzada) + '. Llama a query_sheet (o reutiliza estos datos) y responde con datos reales, nunca inventes.'
-            });
-            continue; // re-intento con datos
+              content: 'Datos de la hoja: ' + JSON.stringify(resForzada) + '. Responde usando SOLO estos datos, nunca inventes.'
+            }]), false);
+            if (dataForzada && dataForzada.choices && dataForzada.choices[0] && dataForzada.choices[0].message.content) {
+              textoFinal = dataForzada.choices[0].message.content;
+            }
           }
           guardarHistorial(obtenerHistorial().concat([
             { role: 'user', content: pregunta },
-            { role: 'assistant', content: respuesta }
+            { role: 'assistant', content: textoFinal }
           ]));
-          return respuesta;
+          return textoFinal;
         }
       } catch (e) {
         ultimoError = (e && e.message) ? e.message : String(e);
