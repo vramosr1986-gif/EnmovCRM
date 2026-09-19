@@ -200,7 +200,8 @@ function responderBotWeb(token, pregunta) {
     '- Si el resultado tiene advertencia (demasiadas filas), díselo al usuario y sugiere refinar.\n' +
     '- Responde en español, breve y claro. Si no hay datos, di "No aparece en la web".\n' +
     '- NO inventes datos. Solo usa lo que devuelva `query_sheet`.\n' +
-    '- El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.';
+    '- El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.\n' +
+    '- REGLA OBLIGATORIA: Para CUALQUIER pregunta sobre datos (conteos, sumas, listas, filtrados, totales, promedios), DEBES llamar a `query_sheet`. Si respondes sin usarla, tu respuesta será rechazada y se te pedirá que uses la herramienta. Si no hay datos, la tool devolverá resumen vacío y tú responderás "No aparece en la web".';
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
@@ -295,6 +296,17 @@ function responderBotWeb(token, pregunta) {
 
         if (msg.content) {
           var respuesta = msg.content;
+          // Validación: si la pregunta parece de datos pero no hubo tool_call, forzamos uso de tool
+          var pareceDatos = /cuantos?|cuanto|total|suma|promedio|promedio|list|lista|pacientes?|dinero|sesiones?|factur|ingresos?|efectivo|tarjeta|bono|fisio|cliente|mes|ayer|hoy|semana|ano|top|ranking|mas|menos|entre|por\s+\w+/.test(pregunta.toLowerCase());
+          if (pareceDatos) {
+            // Forzamos una llamada a query_sheet genérica para que traiga datos
+            var moduloDefecto = modulosPermitidos[0] || 'ENMOV';
+            var argsDefecto = { modulo: moduloDefecto, limit: 20 };
+            var resForzada = executeQuery(argsDefecto);
+            messages.push(msg);
+            messages.push({ role: 'tool', tool_call_id: 'forced_' + Date.now(), content: JSON.stringify(resForzada) });
+            continue; // re-intento con datos
+          }
           guardarHistorial(obtenerHistorial().concat([
             { role: 'user', content: pregunta },
             { role: 'assistant', content: respuesta }
