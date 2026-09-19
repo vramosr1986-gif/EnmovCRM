@@ -210,54 +210,45 @@ function responderBotWeb(token, pregunta) {
 
   var systemPrompt = 'Eres el asistente de EnmovCRM. Tienes acceso a la herramienta `query_sheet` para consultar la hoja de datos.\n' +
     'Módulos disponibles:\n' + buildSchemaDescription() + '\n\n' +
-    'CATÁLOGO DE PRECIOS:\n' +
-    'Sesion de Fisio = 45€\nSesion de Fisio Respi = 50€\nSesion de Pilates = 25€\n' +
-    'Bono de Fisio = 200€\nBono de Respi = 240€\nBono de Pilates = 75€\n\n' +
+    'CATÁLOGO: Fisio 45€ | Fisio Respi 50€ | Pilates 25€ | Bono Fisio 200€ | Bono Respi 240€ | Bono Pilates 75€\n\n' +
     'INSTRUCCIONES:\n' +
-    '- USA `query_sheet` SIEMPRE que el usuario pida datos, conteos, sumas, listas, filtrados.\n' +
-    '- Parámetros de `query_sheet`:\n' +
-    '  modulo (obligatorio): uno de los módulos permitidos\n' +
-    '  filtros: {fecha: "hoy|ayer|mes|YYYY-MM-DD", fisio: "nombre", cliente: "nombre", pago: "efectivo|tarjeta|bono"}\n' +
-    '  groupBy: "fisio" | "cliente" | "pago" | "fecha" | "none" (agrupa y cuenta)\n' +
-    '  aggregates: ["count", "sum_cantidad"] (qué calcular por grupo)\n' +
-    '  orderBy: "fecha" | "hora" | "cantidad" | "cliente" | "fisio"\n' +
-    '  orderDir: "asc" | "desc"\n' +
-    '  limit: número máx de filas/grupos (defecto 50)\n' +
-    '- Si el resultado tiene advertencia (demasiadas filas), díselo al usuario y sugiere refinar.\n' +
-    '- Responde en español, breve y claro. Si el resultado es 0 filas, REINTENTA: prueba con otro filtro o sin filtrar fecha antes de concluir. Solo di "No aparece en la web." si la hoja está realmente vacía.\n' +
-    '- NO inventes datos. Solo usa lo que devuelva `query_sheet`.\n' +
-    '- El usuario actual es "' + nombreSesion + '" con rol ' + rolSesion + '.\n' +
-    '- REGLA OBLIGATORIA: Para CUALQUIER pregunta sobre datos (conteos, sumas, listas, filtrados, totales, promedios), DEBES llamar a `query_sheet`. Si respondes sin usarla, tu respuesta será rechazada y se te pedirá que uses la herramienta. Si no hay datos, la tool devolverá resumen vacío y tú responderás "No aparece en la web".';
+    '- CUALQUIER dato (conteos, sumas, listas, totales) requiere llamar a `query_sheet`.\n' +
+    '- Params: modulo (obligatorio), filtros {fecha:hoy|ayer|mes|YYYY-MM-DD, fisio, cliente, pago:efectivo|tarjeta|bono}, groupBy:fisio|cliente|pago|fecha|none, aggregates:[count|sum_cantidad], orderBy:fecha|hora|cantidad|cliente|fisio, orderDir:asc|desc, limit.\n' +
+    '- Si resultado.advertencia existe, díselo y sugiere refinar la consulta.\n' +
+    '- Si la consulta devuelve 0 filas, REINTENTA sin filtro de fecha o con otra fecha. SOLO di "No aparece en la web." si la hoja está realmente vacía.\n' +
+    '- NO inventes datos. Usa solo lo que devuelva `query_sheet`.\n' +
+    '- Usuario actual: "' + nombreSesion + '" rol ' + rolSesion + '.';
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
 
   var baseGroq = 'https://api.groq.com/openai/v1';
-  var modelos = ['groq/compound-mini', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
+  var modelos = ['groq/compound-mini', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
 
   var tools = [{
     type: 'function',
     function: {
       name: 'query_sheet',
-      description: 'Consulta la hoja de datos con filtros, agrupaciones y agregaciones',
+      description: 'Consulta la hoja de datos. Si 0 filas, reintenta sin filtro de fecha antes de concluir.',
       parameters: {
         type: 'object',
         properties: {
           modulo: { type: 'string', enum: modulosPermitidos },
           filtros: {
             type: 'object',
+            description: 'fecha:hoy|ayer|mes|YYYY-MM-DD; pago:efectivo|tarjeta|bono',
             properties: {
-              fecha: { type: 'string', description: 'hoy, ayer, mes, o YYYY-MM-DD' },
+              fecha: { type: 'string' },
               fisio: { type: 'string' },
               cliente: { type: 'string' },
-              pago: { type: 'string', enum: ['efectivo', 'tarjeta', 'bono'] }
+              pago: { type: 'string' }
             }
           },
           groupBy: { type: 'string', enum: ['fisio', 'cliente', 'pago', 'fecha', 'none'] },
           aggregates: { type: 'array', items: { type: 'string', enum: ['count', 'sum_cantidad'] } },
           orderBy: { type: 'string', enum: ['fecha', 'hora', 'cantidad', 'cliente', 'fisio'] },
           orderDir: { type: 'string', enum: ['asc', 'desc'] },
-          limit: { type: 'integer', minimum: 1, maximum: 200 }
+          limit: { type: 'integer' }
         },
         required: ['modulo']
       }
@@ -296,17 +287,25 @@ function responderBotWeb(token, pregunta) {
 
   var messages = [
     { role: 'system', content: systemPrompt }
-  ].concat(obtenerHistorial().slice(-6)).concat([{ role: 'user', content: pregunta }]);
+  ].concat(obtenerHistorial().slice(-4)).concat([{ role: 'user', content: pregunta }]);
 
   var ultimoError = '';
+  function registrarError(texto) {
+    if (!texto) return;
+    if (ultimoError.indexOf(texto) !== -1) return;
+    var lista = ultimoError ? ultimoError.split(' | ') : [];
+    lista.push(String(texto).slice(0, 300));
+    if (lista.length > 4) lista.shift();
+    ultimoError = lista.join(' | ');
+  }
   for (var intento = 0; intento < 3; intento++) {
     for (var m = 0; m < modelos.length; m++) {
       try {
         var data = llamarGroq(modelos[m], messages, true);
-        if (data && data.error) { ultimoError = data.error.message || JSON.stringify(data.error); continue; }
+        if (data && data.error) { registrarError(data.error.message || JSON.stringify(data.error)); continue; }
         if (!data || !data.choices || !data.choices[0]) continue;
         var msg = data.choices[0].message;
-        if (data.choices[0].finish_reason === 'length') { ultimoError = 'respuesta truncada por tokens'; }
+        if (data.choices[0].finish_reason === 'length') { registrarError('respuesta truncada por tokens'); }
 
         var usoTool = false;
         messages.push(msg);
@@ -332,7 +331,7 @@ function responderBotWeb(token, pregunta) {
           // Pasada final SIN tools para cerrar la respuesta con los datos reales
           var dataFinal = llamarGroq(modelos[m], messages, false);
           if (dataFinal && dataFinal.error) {
-            ultimoError = dataFinal.error.message || JSON.stringify(dataFinal.error);
+            registrarError(dataFinal.error.message || JSON.stringify(dataFinal.error));
           }
           if (dataFinal && dataFinal.choices && dataFinal.choices[0] && dataFinal.choices[0].message.content) {
             textoFinal = dataFinal.choices[0].message.content;
@@ -360,7 +359,7 @@ function responderBotWeb(token, pregunta) {
           return textoFinal;
         }
       } catch (e) {
-        ultimoError = (e && e.message) ? e.message : String(e);
+        registrarError((e && e.message) ? e.message : String(e));
         Logger.log('GROQ error: ' + e);
       }
     }
