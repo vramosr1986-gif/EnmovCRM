@@ -35,25 +35,80 @@ function responderBotWeb(token, pregunta) {
 
       var fechaIdx = getColumnaFechaIdx(headers);
       var clienteIdx = getColumnaClienteIdx(headers);
-      var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
+      var cantidadIdx = getColumnaCantidadIdx(headers);
+      var pagoIdx = -1;
+      for (var ci = 0; ci < headers.length; ci++) {
+        if (normalizarTexto(headers[ci]).indexOf('como_paga') !== -1 || normalizarTexto(headers[ci]).indexOf('como paga') !== -1) {
+          pagoIdx = ci; break;
+        }
+      }
+      var fisioIdx = getColumnaFisioIdx(headers);
+      var horaIdx = getColumnaHoraIdx(headers);
 
-      var sesionesHoy = 0;
-      var clientesHoy = [];
+      var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
+      var ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
+      var ayer = Utilities.formatDate(ayerDate, 'Europe/Madrid', 'dd/MM/yyyy');
+      var inicioMes = Utilities.formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'Europe/Madrid', 'dd/MM/yyyy');
+
+      var sesionesHoy = 0, clientesHoy = [], dineroHoy = 0, dineroHoyEfectivo = 0, dineroHoyTarjeta = 0, dineroHoyBono = 0;
+      var sesionesAyer = 0, clientesAyer = [], dineroAyer = 0;
+      var sesionesMes = 0, clientesMes = [], dineroMes = 0, dineroMesEfectivo = 0, dineroMesTarjeta = 0, dineroMesBono = 0;
+      var totalRegistros = filas.length, totalDinero = 0, totalEfectivo = 0, totalTarjeta = 0, totalBono = 0;
+      var clientesTotales = [];
+
       for (var f = 0; f < filas.length; f++) {
-        var filaHoy = filas[f];
-        var valFecha = filaHoy[fechaIdx];
-        if (fechaIdx >= 0 && normalizarFechaClave(String(valFecha == null ? '' : valFecha)) === normalizarFechaClave(hoy)) {
+        var fila = filas[f];
+        var valFecha = fila[fechaIdx];
+        var fechaNorm = fechaIdx >= 0 ? normalizarFechaClave(String(valFecha == null ? '' : valFecha)) : '';
+        var esHoy = fechaIdx >= 0 && fechaNorm === normalizarFechaClave(hoy);
+        var esAyer = fechaIdx >= 0 && fechaNorm === normalizarFechaClave(ayer);
+        var esMes = fechaIdx >= 0 && fechaNorm >= normalizarFechaClave(inicioMes);
+
+        var nomCliente = clienteIdx >= 0 ? String(fila[clienteIdx] || '').trim() : '';
+        var cant = cantidadIdx >= 0 ? parseNumber(String(fila[cantidadIdx] == null ? '' : fila[cantidadIdx])) : null;
+        var pago = pagoIdx >= 0 ? normalize(String(fila[pagoIdx] == null ? '' : fila[pagoIdx])) : '';
+
+        if (nomCliente && clientesTotales.indexOf(nomCliente) === -1) clientesTotales.push(nomCliente);
+        if (cant != null && cant > 0) {
+          totalDinero += cant;
+          if (pago === 'efectivo') totalEfectivo += cant;
+          else if (pago === 'tarjeta') totalTarjeta += cant;
+          else if (pago === 'bono') totalBono += cant;
+        }
+
+        if (esHoy) {
           sesionesHoy++;
-          if (clienteIdx >= 0) {
-            var nomCliente = String(filaHoy[clienteIdx] || '').trim();
-            if (nomCliente && clientesHoy.indexOf(nomCliente) === -1) {
-              clientesHoy.push(nomCliente);
-            }
+          if (nomCliente && clientesHoy.indexOf(nomCliente) === -1) clientesHoy.push(nomCliente);
+          if (cant != null && cant > 0) {
+            dineroHoy += cant;
+            if (pago === 'efectivo') dineroHoyEfectivo += cant;
+            else if (pago === 'tarjeta') dineroHoyTarjeta += cant;
+            else if (pago === 'bono') dineroHoyBono += cant;
+          }
+        }
+        if (esAyer) {
+          sesionesAyer++;
+          if (nomCliente && clientesAyer.indexOf(nomCliente) === -1) clientesAyer.push(nomCliente);
+          if (cant != null && cant > 0) dineroAyer += cant;
+        }
+        if (esMes) {
+          sesionesMes++;
+          if (nomCliente && clientesMes.indexOf(nomCliente) === -1) clientesMes.push(nomCliente);
+          if (cant != null && cant > 0) {
+            dineroMes += cant;
+            if (pago === 'efectivo') dineroMesEfectivo += cant;
+            else if (pago === 'tarjeta') dineroMesTarjeta += cant;
+            else if (pago === 'bono') dineroMesBono += cant;
           }
         }
       }
 
-      fragmentos.push('Resumen: ' + filas.length + ' registros en total. Hoy (' + hoy + '): ' + sesionesHoy + ' sesiones y ' + clientesHoy.length + ' pacientes distintos: ' + (clientesHoy.length ? clientesHoy.join(', ') : 'ninguno') + '.');
+      fragmentos.push('\nMODULO: ' + nombreModulo);
+      fragmentos.push('Columnas: ' + headers.join(' | '));
+      fragmentos.push('RESUMEN TOTAL: ' + totalRegistros + ' registros, ' + clientesTotales.length + ' pacientes unicos, ' + totalDinero + '€ total (Efectivo: ' + totalEfectivo + '€, Tarjeta: ' + totalTarjeta + '€, Bono: ' + totalBono + '€).');
+      fragmentos.push('HOY (' + hoy + '): ' + sesionesHoy + ' sesiones, ' + clientesHoy.length + ' pacientes, ' + dineroHoy + '€ (Efectivo: ' + dineroHoyEfectivo + ', Tarjeta: ' + dineroHoyTarjeta + ', Bono: ' + dineroHoyBono + ').');
+      fragmentos.push('AYER (' + ayer + '): ' + sesionesAyer + ' sesiones, ' + clientesAyer.length + ' pacientes, ' + dineroAyer + '€.');
+      fragmentos.push('MES ACTUAL (desde ' + inicioMes + '): ' + sesionesMes + ' sesiones, ' + clientesMes.length + ' pacientes, ' + dineroMes + '€ (Efectivo: ' + dineroMesEfectivo + ', Tarjeta: ' + dineroMesTarjeta + ', Bono: ' + dineroMesBono + ').');
 
       var filasHoy = [];
       for (var f2 = 0; f2 < filas.length; f2++) {
@@ -66,15 +121,6 @@ function responderBotWeb(token, pregunta) {
       if (filasHoy.length === 0) {
         fragmentos.push('No hay sesiones hoy.');
       } else {
-        var fisioIdx = getColumnaFisioIdx(headers);
-        var cantidadIdx = getColumnaCantidadIdx(headers);
-        var pagoIdx = -1;
-        for (var ci = 0; ci < headers.length; ci++) {
-          if (normalizarTexto(headers[ci]).indexOf('como_paga') !== -1 || normalizarTexto(headers[ci]).indexOf('como paga') !== -1) {
-            pagoIdx = ci; break;
-          }
-        }
-        var horaIdx = getColumnaHoraIdx(headers);
         var maxFilas = Math.min(10, filasHoy.length);
         fragmentos.push('Sesiones de hoy (mostrando ' + maxFilas + ' de ' + filasHoy.length + '):');
         for (var j = 0; j < maxFilas; j++) {
