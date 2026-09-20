@@ -28,7 +28,7 @@ function parseDate(entrada) {
 
 function responderBotWeb(token, pregunta) {
   var sesion = requireSession(token != '' ? token : '');
-  var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
+  var esAdmin = String(sesion.role || '').toLowerCase() === 'admin';
   var nombreSesion = sesion.nombre || sesion.username || '';
   var rolSesion = esAdmin ? 'administrador' : 'fisioterapeuta';
 
@@ -534,7 +534,7 @@ function responderBotWeb(token, pregunta) {
 
 function ejecutarAccionAsistenteWeb(token, modulo, accion, indiceFila, datosFila) {
   var sesion = requireSession(token != '' ? token : '');
-  var esAdmin = String(sesion.rol || '').toLowerCase() === 'admin';
+  var esAdmin = String(sesion.role || '').toLowerCase() === 'admin';
   if (!esAdmin) return 'Solo el administrador puede ejecutar acciones.';
   var permiso = sesion.modules || [];
   if (permiso.indexOf(modulo) === -1) return 'No tienes acceso a este modulo.';
