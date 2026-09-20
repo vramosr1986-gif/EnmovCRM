@@ -357,6 +357,7 @@ function responderBotWeb(token, pregunta) {
   var baseGroq = 'https://api.groq.com/openai/v1';
   var modelos = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
   var modelosDSL = ['groq/compound-mini', 'openai/gpt-oss-20b'];
+  var preguntaEsDatos = /cuantos?|cuanto|total|suma|promedio|list|lista|pacientes?|dinero|sesiones?|factur|ingresos?|efectivo|tarjeta|bono|fisio|cliente|mes|ayer|hoy|semana|ano|top|ranking|mas|menos|entre/.test(pregunta.toLowerCase());
 
   var tools = [{
     type: 'function',
@@ -484,6 +485,13 @@ function responderBotWeb(token, pregunta) {
           var res = ejecutarHerramienta(accion.tool, accion.args);
           mensajes2.push({ role: 'assistant', content: texto });
           mensajes2.push({ role: 'user', content: 'Resultado:\n' + JSON.stringify(res) });
+          continue;
+        }
+        if (ronda === 0 && preguntaEsDatos) {
+          var moduloFuerzo = modulosPermitidos[0] || 'ENMOV';
+          var fuerzo = executeQuery({ modulo: moduloFuerzo, limit: 20 });
+          mensajes2.push({ role: 'assistant', content: texto });
+          mensajes2.push({ role: 'user', content: 'Aviso: no ejecutaste ninguna consulta. Estos son los DATOS REALES de la hoja "' + moduloFuerzo + '":\n' + JSON.stringify(fuerzo) + '\nResponde usando SOLO estos datos, calcula los números tú mismo, nunca inventes.' });
           continue;
         }
         return texto;
