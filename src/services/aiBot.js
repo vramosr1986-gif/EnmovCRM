@@ -340,7 +340,7 @@ function responderBotWeb(token, pregunta) {
     '- Si resultado.advertencia existe, díselo y sugiere refinar la consulta.\n' +
     '- Si la consulta devuelve 0 filas, REINTENTA sin filtro de fecha o con otra fecha. SOLO di "No aparece en la web." si la hoja está realmente vacía.\n' +
     '- NO inventes datos. Usa solo lo que devuelva `query_sheet`.\n' +
-    '- FORMATO: NUNCA uses tablas markdown (columnas |). Responde en texto plano legible con frases cortas y listas de guiones ("- "). Ejemplo: "- 10/02/2026 · Carolina · Efectivo · 200 €". Resumen breve primero, pocas líneas.\n' +
+    '- FORMATO: NUNCA uses tablas markdown (columnas |). Responde en texto plano legible: frases cortas, listas de guiones ("- ") o listas ordenadas ("1. ", "2. "). Ejemplo: "1. 10/02/2026 · Carolina · Efectivo · 200 €". Resumen breve primero, pocas líneas.\n' +
     '- EDITAR (solo admin, tope 10): cuando el usuario pida modificar registros, usa `query_sheet` con los mismos filtros para saber CUÁNTOS coinciden, muéstraselo y exige que escriba ese número exacto. Solo entonces llama `editar_registros` con confirmacion = ese número. Campos editables: fecha, hora, cliente, fisio, cantidad, pago, operacion.\n' +
     '- CREAR (solo admin): muestra al usuario el registro que vas a crear y exige "confirmo" antes de llamar `crear_registro` con confirmacion=true. cliente es obligatorio.\n' +
     '- Usuario actual: "' + nombreSesion + '" rol ' + rolSesion + '.';
