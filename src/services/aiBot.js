@@ -51,7 +51,7 @@ function responderBotWeb(token, pregunta) {
   };
 
   var MAX_ROWS = 50;
-  var MAX_TOKENS_RESPONSE = 800;
+  var MAX_TOKENS_RESPONSE = 1000;
   var MAX_EDIT = 10;
 
   function getSchemaForModulo(modulo) {
@@ -138,7 +138,7 @@ function responderBotWeb(token, pregunta) {
     var orderDir = params.orderDir || 'desc';
     var limit = params.limit || 50;
 
-    var resultado = { filas: [], resumen: {} };
+    var resultado = { filas: [], resumen: {}, modulo: modulo };
 
     if (groupBy && groupBy !== 'none') {
       var grupoIdx = -1;
@@ -341,15 +341,22 @@ function responderBotWeb(token, pregunta) {
     '- Si la consulta devuelve 0 filas, REINTENTA sin filtro de fecha o con otra fecha. SOLO di "No aparece en la web." si la hoja está realmente vacía.\n' +
     '- NO inventes datos. Usa solo lo que devuelva `query_sheet`.\n' +
     '- FORMATO: NUNCA uses tablas markdown (columnas |). Responde en texto plano legible: frases cortas, listas de guiones ("- ") o listas ordenadas ("1. ", "2. "). Ejemplo: "1. 10/02/2026 · Carolina · Efectivo · 200 €". Resumen breve primero, pocas líneas.\n' +
+    '- MENCIONA SIEMPRE de qué módulo proceden los datos (enmov, navta o domiciliaciones) al responder.\n' +
     '- EDITAR (solo admin, tope 10): cuando el usuario pida modificar registros, usa `query_sheet` con los mismos filtros para saber CUÁNTOS coinciden, muéstraselo y exige que escriba ese número exacto. Solo entonces llama `editar_registros` con confirmacion = ese número. Campos editables: fecha, hora, cliente, fisio, cantidad, pago, operacion.\n' +
     '- CREAR (solo admin): muestra al usuario el registro que vas a crear y exige "confirmo" antes de llamar `crear_registro` con confirmacion=true. cliente es obligatorio.\n' +
+    '- MECANICA DE ACCION: si necesitas consultar la hoja o editar/crear, NUNCA lo inventes. Responde SOLO con un bloque JSON en su propia línea, sin texto alrededor:\n' +
+    '##HERO## {"tool":"query_sheet","args":{"modulo":"...","filtros":{},"groupBy":"...","aggregates":[...]}} ##\n' +
+    'Para editar: ##HERO## {"tool":"editar_registros","args":{"modulo":"...","filtros":{},"campos":{},"confirmacion":<numero confirmado por el usuario>}} ##\n' +
+    'Para crear: ##HERO## {"tool":"crear_registro","args":{"modulo":"...","datos":{},"confirmacion":true}} ##\n' +
+    '- Tras recibir el resultado, responde el texto final con esos datos. Máximo 2 bloques ##HERO## consecutivos.\n' +
     '- Usuario actual: "' + nombreSesion + '" rol ' + rolSesion + '.';
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!apiKey) return 'El asistente no esta configurado: falta la clave API.';
 
   var baseGroq = 'https://api.groq.com/openai/v1';
-  var modelos = ['groq/compound-mini', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
+  var modelos = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
+  var modelosDSL = ['groq/compound-mini', 'openai/gpt-oss-20b'];
 
   var tools = [{
     type: 'function',
@@ -440,6 +447,58 @@ function responderBotWeb(token, pregunta) {
       muteHttpExceptions: true
     });
     return JSON.parse(resp.getContentText());
+  }
+
+  function ejecutarHerramienta(nombreTool, args) {
+    if (nombreTool === 'query_sheet') return executeQuery(args);
+    if (nombreTool === 'editar_registros') return ejecutarEdicion(args);
+    if (nombreTool === 'crear_registro') return ejecutarCreacion(args);
+    return { error: 'Herramienta desconocida: ' + nombreTool };
+  }
+
+  function extraerAccionJSON(texto) {
+    if (!texto) return null;
+    var m = /##HERO##([\s\S]*?)##/.exec(texto);
+    var candidato = m ? m[1].trim() : texto.trim();
+    if (candidato.charAt(0) !== '{') return null;
+    try {
+      var obj = JSON.parse(candidato);
+      if (obj && obj.tool) return obj;
+    } catch (e) { return null; }
+    return null;
+  }
+
+  function ejecutarDSL() {
+    var mensajes2 = [
+      { role: 'system', content: 'Recuerda: si necesitas datos, responde SOLO con ##HERO## {"tool":...,"args":{...}} ##. Luego, con el resultado, responde el texto final.' }
+    ].concat(obtenerHistorial().slice(-4)).concat([{ role: 'user', content: pregunta }]);
+    for (var dm = 0; dm < modelosDSL.length; dm++) {
+      for (var ronda = 0; ronda < 2; ronda++) {
+        var data = llamarGroq(modelosDSL[dm], mensajes2, false);
+        if (data && data.error) { registrarError(data.error.message || JSON.stringify(data.error)); break; }
+        if (!data || !data.choices || !data.choices[0]) continue;
+        var texto = data.choices[0].message.content;
+        if (!texto) continue;
+        var accion = extraerAccionJSON(texto);
+        if (accion && accion.tool && accion.args) {
+          var res = ejecutarHerramienta(accion.tool, accion.args);
+          mensajes2.push({ role: 'assistant', content: texto });
+          mensajes2.push({ role: 'user', content: 'Resultado:\n' + JSON.stringify(res) });
+          continue;
+        }
+        return texto;
+      }
+    }
+    return null;
+  }
+
+  var dslResp = ejecutarDSL();
+  if (dslResp) {
+    guardarHistorial(obtenerHistorial().concat([
+      { role: 'user', content: pregunta },
+      { role: 'assistant', content: dslResp }
+    ]));
+    return dslResp;
   }
 
   var messages = [
