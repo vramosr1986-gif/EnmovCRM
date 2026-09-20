@@ -52,6 +52,7 @@ function responderBotWeb(token, pregunta) {
 
   var MAX_ROWS = 50;
   var MAX_TOKENS_RESPONSE = 800;
+  var MAX_EDIT = 10;
 
   function getSchemaForModulo(modulo) {
     return SCHEMA[modulo] || { nombre: modulo, columnas: {} };
@@ -68,6 +69,47 @@ function responderBotWeb(token, pregunta) {
     return parts.join('\n');
   }
 
+  var HOY = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
+  var MAYER = Utilities.formatDate(new Date(new Date().getTime() - 86400000), 'Europe/Madrid', 'dd/MM/yyyy');
+  var INICIO_MES = Utilities.formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'Europe/Madrid', 'dd/MM/yyyy');
+
+  function construirIndices(headers) {
+    var idx = { fecha: -1, cliente: -1, fisio: -1, cantidad: -1, hora: -1, pago: -1, operacion: -1 };
+    idx.fecha = getColumnaFechaIdx(headers);
+    idx.cliente = getColumnaClienteIdx(headers);
+    idx.fisio = getColumnaFisioIdx(headers);
+    idx.cantidad = getColumnaCantidadIdx(headers);
+    idx.hora = getColumnaHoraIdx(headers);
+    idx.operacion = getColumnaOperacionIdx(headers);
+    for (var i = 0; i < headers.length; i++) {
+      var h = normalizarTexto(headers[i]);
+      if (h.indexOf('como_paga') !== -1 || h.indexOf('como paga') !== -1) { idx.pago = i; break; }
+    }
+    return idx;
+  }
+
+  function seleccionarFilas(filas, headers, filtros, idx) {
+    var seleccion = [];
+    for (var i = 0; i < filas.length; i++) {
+      var fila = filas[i];
+      var coincide = true;
+      var f = filtros || {};
+      if (f.fecha && idx.fecha >= 0) {
+        var v = normalizarFechaClave(String(fila[idx.fecha] == null ? '' : fila[idx.fecha]));
+        if (f.fecha === 'mes') { if (v < normalizarFechaClave(INICIO_MES)) coincide = false; }
+        else if (f.fecha === 'hoy') { if (v !== normalizarFechaClave(HOY)) coincide = false; }
+        else if (f.fecha === 'ayer') { if (v !== normalizarFechaClave(MAYER)) coincide = false; }
+        else if (v !== normalizarFechaClave(f.fecha)) coincide = false;
+        if (!coincide) continue;
+      }
+      if (f.fisio && idx.fisio >= 0 && normalizarTexto(String(fila[idx.fisio] || '')) !== normalizarTexto(f.fisio)) continue;
+      if (f.cliente && idx.cliente >= 0 && normalizarTexto(String(fila[idx.cliente] || '')).indexOf(normalizarTexto(f.cliente)) === -1) continue;
+      if (f.pago && idx.pago >= 0 && normalizarTexto(String(fila[idx.pago] || '')) !== normalizarTexto(f.pago)) continue;
+      seleccion.push({ fila: fila, indice: i });
+    }
+    return seleccion;
+  }
+
   function executeQuery(params) {
     var modulo = params.modulo;
     if (modulosPermitidos.indexOf(modulo) === -1) {
@@ -79,55 +121,16 @@ function responderBotWeb(token, pregunta) {
     var headers = gridFiltrado.headers || [];
     var filas = gridFiltrado.rows || [];
 
-    var schema = getSchemaForModulo(modulo);
-    var fechaIdx = getColumnaFechaIdx(headers);
-    var clienteIdx = getColumnaClienteIdx(headers);
-    var fisioIdx = getColumnaFisioIdx(headers);
-    var cantidadIdx = getColumnaCantidadIdx(headers);
-    var horaIdx = getColumnaHoraIdx(headers);
-    var pagoIdx = -1;
-    for (var ci = 0; ci < headers.length; ci++) {
-      var h = normalizarTexto(headers[ci]);
-      if (h.indexOf('como_paga') !== -1 || h.indexOf('como paga') !== -1) { pagoIdx = ci; break; }
-    }
+    var idx = construirIndices(headers);
+    var fechaIdx = idx.fecha;
+    var clienteIdx = idx.cliente;
+    var fisioIdx = idx.fisio;
+    var cantidadIdx = idx.cantidad;
+    var horaIdx = idx.hora;
+    var pagoIdx = idx.pago;
 
-    var hoy = Utilities.formatDate(new Date(), 'Europe/Madrid', 'dd/MM/yyyy');
-    var ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
-    var ayer = Utilities.formatDate(ayerDate, 'Europe/Madrid', 'dd/MM/yyyy');
-    var inicioMes = Utilities.formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'Europe/Madrid', 'dd/MM/yyyy');
-
-    var filtradas = filas;
-    var filtros = params.filtros || {};
-
-    if (filtros.fecha) {
-      var fechaNorm = null;
-      if (filtros.fecha === 'hoy') fechaNorm = normalizarFechaClave(hoy);
-      else if (filtros.fecha === 'ayer') fechaNorm = normalizarFechaClave(ayer);
-      else if (filtros.fecha !== 'mes') fechaNorm = normalizarFechaClave(filtros.fecha);
-
-      if (filtros.fecha === 'mes') {
-        var inicioNorm = normalizarFechaClave(inicioMes);
-        filtradas = filtradas.filter(function(f) {
-          return fechaIdx >= 0 && normalizarFechaClave(String(f[fechaIdx] == null ? '' : f[fechaIdx])) >= inicioNorm;
-        });
-      } else if (fechaNorm !== null) {
-        filtradas = filtradas.filter(function(f) {
-          return fechaIdx >= 0 && normalizarFechaClave(String(f[fechaIdx] == null ? '' : f[fechaIdx])) === fechaNorm;
-        });
-      }
-    }
-    if (filtros.fisio && fisioIdx >= 0) {
-      var fisioNorm = normalizarTexto(filtros.fisio);
-      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[fisioIdx] || '')) === fisioNorm; });
-    }
-    if (filtros.cliente && clienteIdx >= 0) {
-      var cliNorm = normalizarTexto(filtros.cliente);
-      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[clienteIdx] || '')).indexOf(cliNorm) !== -1; });
-    }
-    if (filtros.pago && pagoIdx >= 0) {
-      var pagoNorm = normalizarTexto(filtros.pago);
-      filtradas = filtradas.filter(function(f) { return normalizarTexto(String(f[pagoIdx] || '')) === pagoNorm; });
-    }
+    var seleccion = seleccionarFilas(filas, headers, params.filtros || {}, idx);
+    var filtradas = seleccion.map(function(s) { return s.fila; });
 
     var groupBy = params.groupBy;
     var aggregates = params.aggregates || ['count'];
@@ -208,6 +211,126 @@ function responderBotWeb(token, pregunta) {
     return resultado;
   }
 
+  function ejecutarEdicion(params) {
+    if (!esAdmin) {
+      return { error: 'Solo el administrador puede editar registros a través del asistente.' };
+    }
+    var modulo = params.modulo;
+    if (modulosPermitidos.indexOf(modulo) === -1) {
+      return { error: 'No tienes acceso al modulo ' + modulo };
+    }
+    var campos = params.campos;
+    if (!campos || typeof campos !== 'object') {
+      return { error: 'Falta el objeto `campos` con qué cambiar (fecha, hora, cliente, fisio, cantidad, pago, operacion).' };
+    }
+    var claves = Object.keys(campos);
+    if (claves.length === 0) {
+      return { error: 'No has indicado qué campos cambiar.' };
+    }
+
+    var grid = getGridDataByModulo(modulo);
+    var headers = grid.headers || [];
+    var filas = grid.rows || [];
+    var idx = construirIndices(headers);
+    var seleccion = seleccionarFilas(filas, headers, params.filtros || {}, idx);
+
+    if (seleccion.length === 0) {
+      return { error: 'Ningún registro coincide con los filtros. No se ha editado nada.' };
+    }
+    if (seleccion.length > MAX_EDIT) {
+      return { error: 'Coinciden ' + seleccion.length + ' registros, supera el tope de ' + MAX_EDIT + '. Refina los filtros (fecha, fisio, cliente) para reducir la selección.' };
+    }
+
+    var confirmacion = Number(params.confirmacion);
+    if (!Number.isInteger(confirmacion) || confirmacion !== seleccion.length) {
+      return {
+        error: 'Confirmación incorrecta: indicaste ' + params.confirmacion + ' registros pero coinciden ' + seleccion.length + '. No se ha editado nada.',
+        coinciden: seleccion.length
+      };
+    }
+
+    var CAMPO_IDX = { fecha: 'fecha', hora: 'hora', cliente: 'cliente', fisio: 'fisio', cantidad: 'cantidad', pago: 'pago', operacion: 'operacion' };
+    var cambios = [];
+    for (var c = 0; c < claves.length; c++) {
+      var clave = String(claves[c]).toLowerCase();
+      var idxKey = CAMPO_IDX[clave];
+      if (!idxKey) {
+        return { error: 'Campo no editable: ' + claves[c] + '. Usa solo fecha, hora, cliente, fisio, cantidad, pago u operacion.' };
+      }
+      if (idx[idxKey] < 0) {
+        return { error: 'No se encontró la columna para el campo ' + claves[c] + '. No se ha editado nada.' };
+      }
+      cambios.push({ col: idx[idxKey], valor: campos[claves[c]] == null ? '' : String(campos[claves[c]]) });
+    }
+
+    var editados = 0;
+    var filasTocadas = [];
+    for (var i = 0; i < seleccion.length; i++) {
+      var filaActual = seleccion[i].fila.slice();
+      for (var cc = 0; cc < cambios.length; cc++) {
+        filaActual[cambios[cc].col] = cambios[cc].valor;
+      }
+      try {
+        actualizarRegistro(token, modulo, seleccion[i].indice, filaActual);
+        filasTocadas.push(seleccion[i].indice + 2);
+        editados++;
+      } catch (er) {
+        return {
+          error: 'Fallo al editar la fila ' + (seleccion[i].indice + 2) + ': ' + er.message + '. Editadas antes del fallo: ' + editados,
+          editados: editados
+        };
+      }
+    }
+    return { editados: editados, filas: filasTocadas, modulo: modulo };
+  }
+
+  function ejecutarCreacion(params) {
+    if (!esAdmin) {
+      return { error: 'Solo el administrador puede crear registros a través del asistente.' };
+    }
+    var modulo = params.modulo;
+    if (modulosPermitidos.indexOf(modulo) === -1) {
+      return { error: 'No tienes acceso al modulo ' + modulo };
+    }
+    if (params.confirmacion !== true) {
+      return { error: 'Falta la confirmación del usuario para crear el registro.' };
+    }
+    var datos = params.datos;
+    if (!datos || typeof datos !== 'object') {
+      return { error: 'Falta el objeto `datos` con los campos del registro.' };
+    }
+    if (!datos.cliente || String(datos.cliente).trim() === '') {
+      return { error: 'El campo `cliente` es obligatorio para crear un registro.' };
+    }
+
+    var grid = getGridDataByModulo(modulo);
+    var headers = grid.headers || [];
+    var idx = construirIndices(headers);
+    var datosFila = [];
+    for (var i = 0; i < headers.length; i++) { datosFila[i] = ''; }
+
+    var CAMPO_IDX = { fecha: 'fecha', hora: 'hora', cliente: 'cliente', fisio: 'fisio', cantidad: 'cantidad', pago: 'pago', operacion: 'operacion' };
+    var claves = Object.keys(datos);
+    for (var c = 0; c < claves.length; c++) {
+      var clave = String(claves[c]).toLowerCase();
+      var idxKey = CAMPO_IDX[clave];
+      if (!idxKey) {
+        return { error: 'Campo no válido: ' + claves[c] + '. Usa solo fecha, hora, cliente, fisio, cantidad, pago u operacion.' };
+      }
+      if (idx[idxKey] < 0) {
+        return { error: 'No se encontró la columna para el campo ' + claves[c] + '. No se ha creado nada.' };
+      }
+      datosFila[idx[idxKey]] = datos[claves[c]] == null ? '' : String(datos[claves[c]]);
+    }
+
+    try {
+      crearRegistro(token, modulo, datosFila);
+    } catch (er) {
+      return { error: 'Fallo al crear el registro: ' + er.message };
+    }
+    return { creado: true, modulo: modulo };
+  }
+
   var systemPrompt = 'Eres el asistente de EnmovCRM. Tienes acceso a la herramienta `query_sheet` para consultar la hoja de datos.\n' +
     'Módulos disponibles:\n' + buildSchemaDescription() + '\n\n' +
     'CATÁLOGO: Fisio 45€ | Fisio Respi 50€ | Pilates 25€ | Bono Fisio 200€ | Bono Respi 240€ | Bono Pilates 75€\n\n' +
@@ -217,6 +340,9 @@ function responderBotWeb(token, pregunta) {
     '- Si resultado.advertencia existe, díselo y sugiere refinar la consulta.\n' +
     '- Si la consulta devuelve 0 filas, REINTENTA sin filtro de fecha o con otra fecha. SOLO di "No aparece en la web." si la hoja está realmente vacía.\n' +
     '- NO inventes datos. Usa solo lo que devuelva `query_sheet`.\n' +
+    '- FORMATO: NUNCA uses tablas markdown (columnas |). Responde en texto plano legible con frases cortas y listas de guiones ("- "). Ejemplo: "- 10/02/2026 · Carolina · Efectivo · 200 €". Resumen breve primero, pocas líneas.\n' +
+    '- EDITAR (solo admin, tope 10): cuando el usuario pida modificar registros, usa `query_sheet` con los mismos filtros para saber CUÁNTOS coinciden, muéstraselo y exige que escriba ese número exacto. Solo entonces llama `editar_registros` con confirmacion = ese número. Campos editables: fecha, hora, cliente, fisio, cantidad, pago, operacion.\n' +
+    '- CREAR (solo admin): muestra al usuario el registro que vas a crear y exige "confirmo" antes de llamar `crear_registro` con confirmacion=true. cliente es obligatorio.\n' +
     '- Usuario actual: "' + nombreSesion + '" rol ' + rolSesion + '.';
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
@@ -251,6 +377,37 @@ function responderBotWeb(token, pregunta) {
           limit: { type: 'integer' }
         },
         required: ['modulo']
+      }
+    }
+  }, {
+    type: 'function',
+    function: {
+      name: 'editar_registros',
+      description: 'Edita registros existentes en la hoja (solo admin, tope 10). Exige que el usuario confirme por escrito el número exacto de registros a modificar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          modulo: { type: 'string', enum: modulosPermitidos },
+          filtros: { type: 'object', description: 'Seleccion: fecha(hoy|ayer|mes|YYYY-MM-DD), fisio, cliente, pago(efectivo|tarjeta|bono)' },
+          campos: { type: 'object', description: 'Cambios: fecha, hora, cliente, fisio, cantidad, pago, operacion' },
+          confirmacion: { type: 'integer', description: 'Numero de registros que el usuario confirmó por escrito' }
+        },
+        required: ['modulo', 'campos', 'confirmacion']
+      }
+    }
+  }, {
+    type: 'function',
+    function: {
+      name: 'crear_registro',
+      description: 'Crea un registro nuevo en la hoja (solo admin). Exige confirmacion explicita del usuario antes de llamarla.',
+      parameters: {
+        type: 'object',
+        properties: {
+          modulo: { type: 'string', enum: modulosPermitidos },
+          datos: { type: 'object', description: 'Datos: fecha, hora, cliente, fisio, cantidad, pago, operacion. cliente obligatorio' },
+          confirmacion: { type: 'boolean', description: 'true solo si el usuario confirmó' }
+        },
+        required: ['modulo', 'datos', 'confirmacion']
       }
     }
   }];
@@ -313,16 +470,24 @@ function responderBotWeb(token, pregunta) {
           usoTool = true;
           for (var tc = 0; tc < msg.tool_calls.length; tc++) {
             var call = msg.tool_calls[tc];
-            if (call.function && call.function.name === 'query_sheet') {
+            var contenidoTool = 'Herramienta desconocida.';
+            if (call.function) {
+              var nombreTool = call.function.name;
               var args = null;
-              try { args = JSON.parse(call.function.arguments); } catch (pe) { args = {}; }
-              var resultado = executeQuery(args);
-              messages.push({
-                role: 'tool',
-                tool_call_id: call.id,
-                content: JSON.stringify(resultado)
-              });
+              try { args = JSON.parse(call.function.arguments || '{}'); } catch (pe) { args = {}; }
+              if (nombreTool === 'query_sheet') {
+                contenidoTool = JSON.stringify(executeQuery(args));
+              } else if (nombreTool === 'editar_registros') {
+                contenidoTool = JSON.stringify(ejecutarEdicion(args));
+              } else if (nombreTool === 'crear_registro') {
+                contenidoTool = JSON.stringify(ejecutarCreacion(args));
+              }
             }
+            messages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: contenidoTool
+            });
           }
         }
 
